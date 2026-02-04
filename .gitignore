@@ -1,0 +1,35 @@
+# Temporary files
+nul
+*.tmp
+~$*
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Output files (generated)
+output/*.xlsx
+output/*.json
+output/images/
+testcase-generator/output/*.xlsx
+testcase-generator/output/*.json
+testcase-generator/output/images/
+
+# Comparison/debug files
+compare_output.txt
+detailed_compare.txt
+comparison_report.txt
+extracted.json
+testcases.json
+
+# Keep .gitignore in output folders
+!output/.gitignore
+!testcase-generator/output/.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

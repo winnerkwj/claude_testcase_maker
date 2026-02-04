@@ -1,0 +1,16 @@
+# 테스트케이스 생성기 임시 파일
+# 이 폴더의 이미지는 화면정의서에서 추출된 것으로
+# 민감한 정보가 포함될 수 있습니다.
+
+images/
+image_manifest.json
+image_analysis.json
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+
+# 분석 결과는 유지 (필요시 주석 해제)
+# !image_analysis.json
