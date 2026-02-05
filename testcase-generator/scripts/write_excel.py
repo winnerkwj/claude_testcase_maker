@@ -12,6 +12,7 @@ from datetime import datetime
 from openpyxl import load_workbook, Workbook
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
+from openpyxl.comments import Comment
 
 
 # 기본 컬럼 매핑 (0-indexed)
@@ -203,6 +204,7 @@ def create_new_testcase_excel(testcases_data: dict, output_path: Path):
     round2_fill = PatternFill(start_color="FFC000", end_color="FFC000", fill_type="solid")  # 주황
     round3_fill = PatternFill(start_color="ED7D31", end_color="ED7D31", fill_type="solid")  # 빨강
     summary_fill = PatternFill(start_color="D9E2F3", end_color="D9E2F3", fill_type="solid")
+    blank_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")  # 노란색 (공란 표시)
 
     header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
     thin_border = Border(
@@ -348,6 +350,13 @@ def create_new_testcase_excel(testcases_data: dict, output_path: Path):
         clean_val = illegal_xml_chars.sub('', str_val)
         return clean_val
 
+    # 공란 처리 대상 필드 (필드명, 컬럼 인덱스)
+    blank_check_fields = [
+        ("pre_condition", 8),
+        ("test_step", 9),
+        ("expected_result", 10),
+    ]
+
     for idx, tc in enumerate(testcases, start=1):
         row = data_start_row + idx - 1
 
@@ -366,6 +375,20 @@ def create_new_testcase_excel(testcases_data: dict, output_path: Path):
         sheet.cell(row=row, column=12).value = tc.get("reference", "")
         sheet.cell(row=row, column=13).value = tc.get("importance", "")
         sheet.cell(row=row, column=14).value = tc.get("writer", "")
+
+        # 공란 필드에 노란색 배경 + 코멘트 적용
+        blank_reasons = tc.get("_blank_reasons", {})
+        for field_name, col_idx in blank_check_fields:
+            value = tc.get(field_name, "")
+            # 값이 비어있고 _blank_reasons에 해당 필드가 있으면 노란색 + 코멘트 적용
+            if not value and field_name in blank_reasons:
+                cell = sheet.cell(row=row, column=col_idx)
+                cell.fill = blank_fill
+                comment = Comment(
+                    text=blank_reasons[field_name],
+                    author="TC Generator"
+                )
+                cell.comment = comment
 
         # 모든 셀에 스타일 적용
         for col in range(1, total_cols + 1):
