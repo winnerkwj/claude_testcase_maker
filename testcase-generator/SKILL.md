@@ -4,16 +4,64 @@
 
 화면정의서(PPTX)를 분석하여 테스트케이스를 자동 생성합니다.
 
-## 핵심 변경: 에이전트 위임 방식
+---
 
-**기존 방식**: 메인 컨텍스트에서 Claude가 직접 분석 (컨텍스트 소모 큼)
-**새로운 방식**: Task 도구로 에이전트에게 위임 (메인 컨텍스트 절약)
+## ⚠️ 실수 방지 체크리스트 (반드시 확인!)
 
-### 에이전트 위임 이점
+### 🚫 절대 금지
 
-- **메인 컨텍스트 절약**: TC 작성 상세 과정이 에이전트 내부에서만 처리
-- **요약만 반환**: 결과 요약만 사용자에게 표시
-- **독립적 실행**: Phase 1~4 전체를 에이전트가 자율적으로 수행
+| 금지 항목 | 이유 |
+|----------|------|
+| `run_all.py` 호출 | 레거시 스크립트, 규칙 기반 TC 생성 |
+| `generate_testcase.py` 호출 | 레거시 스크립트, 템플릿 기반 |
+| 메인 컨텍스트에서 TC 직접 작성 | 컨텍스트 낭비, 에이전트에 위임 |
+| pptx_data.json 내용 직접 읽기 | 컨텍스트 낭비, 에이전트가 읽음 |
+
+### ⚠️ 필드명 규칙 (중요!)
+
+**write_excel.py가 인식하는 필드명** (청크 에이전트가 사용해야 할 이름):
+
+| 필드 | 올바른 키 | 잘못된 키 (사용 금지) |
+|------|----------|---------------------|
+| 테스트 절차 | `test_step` | `steps` |
+| 기대 결과 | `expected_result` | `expected` |
+| 사전 조건 | `pre_condition` | `precondition` |
+
+**참고**: `merge_tc_chunks.py`가 잘못된 키를 자동 변환하지만, 에이전트 프롬프트에서 올바른 키 사용을 권장
+
+### ✅ 필수 확인
+
+1. **청크 에이전트가 TC 작성**: Claude가 pptx_data.json을 분석하고 **사고하여** TC 작성
+2. **🖼️ 이미지 분석 필수**: 에이전트가 `output/images/` 폴더의 이미지를 Read로 분석
+3. **JSON 키 형식**: 청크 파일에서 `testcases` 키 사용 (NOT `test_cases`)
+4. **메인 역할**: 오케스트레이션만 (스크립트 실행, 에이전트 디스패치, 결과 수집)
+
+### 📋 메인 컨텍스트 최소화
+
+메인 컨텍스트에서 하는 일:
+- ✅ 스크립트 실행 (Bash)
+- ✅ 에이전트 디스패치 (Task)
+- ✅ 결과 요약 출력
+
+메인 컨텍스트에서 하면 안 되는 일:
+- ❌ pptx_data.json 내용 Read로 읽기
+- ❌ chunk_plan.json 내용 Read로 읽기 (청크 수만 확인)
+- ❌ TC 내용 직접 작성
+- ❌ 각 청크 결과 상세 확인
+
+---
+
+## 핵심 변경: 청크 기반 병렬 처리
+
+**기존 방식**: 단일 에이전트가 전체 문서 처리 (컨텍스트 초과 위험)
+**새로운 방식**: 문서를 청크로 분할하여 병렬 에이전트로 처리 (안정적)
+
+### 청크 기반 처리 이점
+
+- **컨텍스트 초과 방지**: 15페이지 단위로 분할하여 처리
+- **병렬 처리**: 최대 3개 에이전트 동시 실행으로 속도 향상
+- **실패 복구 용이**: 청크 단위 재시도 가능
+- **대용량 문서 지원**: 100+ 페이지 문서도 안정적 처리
 
 ### 핵심 원칙
 
@@ -23,6 +71,14 @@
 4. **크로스 레퍼런스 자동 추가**: 기능 설명 부족 시 관련 페이지 참조
 5. **Reference = 페이지 번호만**: `"5P"` 형식
 6. **레퍼런스 하드코딩 금지**: 사용자 요청 시에만 수동 추가
+
+### 청크 분할 기준
+
+| 설정 | 값 | 설명 |
+|------|-----|------|
+| MAX_PAGES_PER_CHUNK | 15 | 청크당 최대 페이지 수 |
+| MAX_COMPONENTS_PER_CHUNK | 80 | 청크당 최대 컴포넌트 수 |
+| MAX_PARALLEL_AGENTS | 3 | 동시 실행 에이전트 수 |
 
 ### 하드코딩 금지
 
@@ -54,28 +110,78 @@
 /testcase <PPTX_파일_경로> [--prefix IT_XX]
 ```
 
-## 워크플로우 (에이전트 위임)
+## 워크플로우 (청크 기반 병렬 처리)
 
-메인 컨텍스트 절약을 위해 Task 도구로 에이전트에게 위임합니다.
+대용량 문서(15페이지 초과)는 자동으로 청크 분할 처리합니다.
 
-### Step 1: [메인] 파일 확인
-- PPTX 파일 존재 여부 확인
-- 옵션 파싱 (--prefix 등)
-- 사용자에게 "에이전트에게 위임 중..." 메시지 출력
+### 워크플로우 다이어그램
 
-### Step 2: [에이전트] TC 생성
-Task 도구로 `general-purpose` 에이전트에게 전체 TC 생성 위임:
-- Phase 1~4 전체 수행
-- tc_data.json 생성
-- Excel 출력
-- 요약 반환
+```
+[메인 컨텍스트 - 오케스트레이터]
+     │
+     ├── Step 1: Phase 1 실행 (스크립트)
+     │
+     ├── Step 2: 청크 계획 수립 (plan_chunks.py)
+     │
+     ├── Step 3: 병렬 에이전트 디스패치
+     │     ├── Agent-1: Chunk 1 (1~15P) → tc_chunk_1.json
+     │     ├── Agent-2: Chunk 2 (16~30P) → tc_chunk_2.json
+     │     └── Agent-3: Chunk 3 (31~45P) → tc_chunk_3.json
+     │
+     ├── Step 4: 결과 병합 (merge_tc_chunks.py)
+     │
+     └── Step 5: Excel 출력 + 검증/통계 통합
+```
 
-### Step 3: [메인] 결과 출력
-에이전트 반환값에서 요약만 사용자에게 출력
+### Step 1: [메인] Phase 1 실행
+```bash
+cd "{scripts_dir}"
+py extract_images.py "{pptx_path}" --output "{output_dir}" --quiet
+py extract_pptx.py "{pptx_path}" "{output_dir}/pptx_data.json"
+```
+
+### Step 2: [메인] 청크 계획 수립
+```bash
+py plan_chunks.py "{output_dir}/pptx_data.json" --max-pages 15
+```
+
+출력: `chunk_plan.json`
+```json
+{
+  "total_chunks": 3,
+  "chunks": [
+    {"id": 1, "slides": [1,2,...,15], "section": "01 공통 Layout"},
+    {"id": 2, "slides": [16,...,30], "section": "02 Worklist"},
+    {"id": 3, "slides": [31,...,45], "section": "03 Viewer"}
+  ]
+}
+```
+
+### Step 3: [메인] 병렬 에이전트 디스패치
+15페이지 이하 문서: 단일 에이전트로 처리
+15페이지 초과 문서: Task 도구로 청크별 에이전트 **병렬 실행**
+
+**중요**: Task 도구 호출 시 한 번의 메시지에 여러 Task 호출을 포함하여 병렬 실행
+
+### Step 4: [메인] 결과 병합
+```bash
+py merge_tc_chunks.py "{output_dir}" --prefix {prefix}
+```
+- 모든 `tc_chunk_*.json` 파일 병합
+- TC ID 순차 재할당
+- 페이지 순서 정렬
+
+### Step 5: [메인] Excel 출력 + 검증/통계
+```bash
+py write_excel.py "{output_dir}/tc_data.json" "{output_dir}/{project}_TC.xlsx"
+py validate_and_stats.py "{output_dir}/tc_data.json"
+```
 
 ---
 
-## 에이전트 프롬프트 템플릿
+## 청크 에이전트 프롬프트 템플릿
+
+### 단일 에이전트 (15페이지 이하)
 
 ```
 화면정의서 PPTX에서 테스트케이스를 생성해주세요.
@@ -84,6 +190,8 @@ PPTX 파일: {pptx_path}
 출력 폴더: {output_dir}
 TC ID 접두사: {prefix}
 스크립트 폴더: {scripts_dir}
+이미지 폴더: {output_dir}/images/
+이미지 매니페스트: {output_dir}/image_manifest.json
 
 ### 수행할 작업:
 
@@ -98,16 +206,77 @@ TC ID 접두사: {prefix}
    - all_components에서 컴포넌트 목록 파악
    - Description 내 [번호] 참조로 크로스 레퍼런스 매핑
 
-3. **TC 작성** (Phase 3)
+3. **🖼️ 이미지 분석** (Phase 2.5) - 필수!
+   - {output_dir}/image_manifest.json에서 슬라이드별 이미지 목록 확인
+   - Read 도구로 {output_dir}/images/slide_*_*.png 이미지 분석
+   - UI 컴포넌트 위치, 레이아웃, 색상 정보 파악
+   - TC 작성 시 이미지에서 파악한 정보 반영
+
+4. **TC 작성** (Phase 3)
    - 페이지 순서대로 TC 작성
    - TC ID: {prefix}_001, {prefix}_002, ...
    - Reference: 1P, 2P, ... (크로스 레퍼런스: "1P (참조: [11-1])")
+   - **이미지 분석 결과 반영**: 정확한 위치, 시각적 변화 명시
    - {output_dir}/tc_data.json에 저장
 
-4. **Excel 출력** (Phase 4)
+5. **Excel 출력** (Phase 4)
    py write_excel.py "{output_dir}/tc_data.json" "{output_dir}/{project_name}_TestCases.xlsx"
 
-### TC 작성 판단 기준:
+### 반환할 요약:
+- 프로젝트명, 버전
+- 총 TC 수
+- 페이지별 TC 분포
+- 크로스 레퍼런스 현황
+- 분석한 이미지 수
+- 출력 파일 경로
+```
+
+### 청크 에이전트 (병렬 처리용)
+
+```
+화면정의서의 일부 페이지에 대한 테스트케이스를 생성해주세요.
+
+청크 ID: {chunk_id}
+담당 슬라이드: {slide_list}
+섹션: {section_name}
+출력 파일: {output_dir}/tc_chunk_{chunk_id}.json
+TC ID 접두사: {prefix}
+이미지 폴더: {output_dir}/images/
+이미지 매니페스트: {output_dir}/image_manifest.json
+
+### 슬라이드 데이터
+{filtered_pptx_data}
+
+### 🖼️ 이미지 분석 (필수)
+
+**반드시 담당 슬라이드의 이미지를 분석하여 TC에 반영하세요.**
+
+1. **image_manifest.json 확인**
+   - 담당 슬라이드 번호에 해당하는 이미지 목록 확인
+   - 예: slide_5_image_1.png, slide_5_image_2.png
+
+2. **이미지 읽기 (Read 도구 사용)**
+   - `{output_dir}/images/slide_{번호}_*.png` 파일을 Read 도구로 읽기
+   - Claude는 이미지를 직접 분석할 수 있음
+
+3. **이미지에서 파악할 정보**
+   - UI 컴포넌트 위치 (좌측상단, 우측하단, 중앙 등)
+   - 버튼/아이콘 모양 및 배치
+   - 화면 레이아웃 구조 (헤더, 사이드바, 메인 영역)
+   - 색상 정보 (배경색, 강조색)
+   - 텍스트 라벨 확인
+
+4. **TC에 반영할 내용**
+   - Test Step에 정확한 위치 명시: "화면 우측 상단의 [X] 버튼 클릭"
+   - Expected Result에 시각적 변화 명시: "버튼 배경색이 회색에서 파란색으로 변경됨"
+   - 레이아웃 기반 테스트: "사이드바가 접히고 메인 영역이 확장됨"
+
+### TC 작성 규칙
+- TC ID: CHUNK{chunk_id}_001, CHUNK{chunk_id}_002, ... (병합 시 재할당됨)
+- Reference: 슬라이드 번호 그대로 (예: 5P, 16P)
+- 기존 Depth/Title/Step/Expected 규칙 준수
+
+### TC 작성 판단 기준
 - 표시 확인: 모든 UI 컴포넌트에 기본 생성
 - 기능 확인: 버튼, 탭, 입력 등 동작 가능한 요소
 - 단축키 확인: Description에 "단축키", "Hint" 포함 시
@@ -115,16 +284,71 @@ TC ID 접두사: {prefix}
 - 비활성화 확인: "비활성화", "disabled" 조건 언급 시
 - 팝업 확인: "[번호]" 형식 팝업 참조 시
 
-### 크로스 레퍼런스 판단 기준:
+### ⚠️ raw_text 기반 컴포넌트 처리
+
+컴포넌트 중 `source: "raw_text"`인 항목은 테이블이 아닌 자유 형식 텍스트에서 추출된 것입니다.
+- **description 필드에 상세 내용**이 있으므로 이를 기반으로 TC 작성
+- 주로 기능 설명, 동작 방식, 워크플로우 내용이 포함됨
+- raw_text 기반 컴포넌트도 **반드시 TC 작성 대상**에 포함
+
+예시:
+```json
+{
+  "no": 1,
+  "component": "[길이 측정 하기]",
+  "description": "1) 화면 영역에서 왼쪽 마우스 클릭 시 해당 Point를 시작 Point로 설정...",
+  "source": "raw_text"
+}
+```
+→ "길이 측정" 기능에 대한 TC 작성 (표시 확인, 기능 확인 등)
+
+### 크로스 레퍼런스 판단 기준
 - Description에 [번호] 또는 [번호-번호] 형식 참조 시
 - "p.XX 참고", "XX페이지 참조" 문구 발견 시
 - 동일 기능이 다른 페이지에서 상세 설명될 때
 
-### 반환할 요약:
-- 프로젝트명, 버전
-- 총 TC 수
-- 페이지별 TC 분포
-- 크로스 레퍼런스 현황
+### 출력 형식 (tc_chunk_{chunk_id}.json)
+
+**⚠️ 중요**:
+- JSON 키는 반드시 `testcases` 사용 (NOT `test_cases`)
+- 필드명은 `test_step`, `expected_result`, `pre_condition` 사용
+
+```json
+{
+  "chunk_id": {chunk_id},
+  "slide_range": [{start}, {end}],
+  "section": "{section_name}",
+  "testcases": [
+    {
+      "test_case_id": "CHUNK{chunk_id}_001",
+      "depth1": "...",
+      "depth2": "...",
+      "depth3": "...",
+      "depth4": "...",
+      "title": "...",
+      "pre_condition": "사전 조건 (필요시)",
+      "test_step": "1. 첫 번째 단계\n2. 두 번째 단계",
+      "expected_result": "#1 첫 번째 기대결과 #2 두 번째 기대결과",
+      "requirement_id": "",
+      "reference": "{slide_number}P",
+      "importance": "",
+      "writer": ""
+    }
+  ]
+}
+```
+
+**필드명 매핑** (merge_tc_chunks.py가 자동 변환):
+| 입력 (허용) | 출력 (Excel용) |
+|------------|---------------|
+| `steps` | → `test_step` |
+| `expected` | → `expected_result` |
+| `precondition` | → `pre_condition` |
+
+### 반환할 요약
+- 청크 ID
+- 처리한 슬라이드 범위
+- 생성된 TC 수
 - 출력 파일 경로
 ```
 
@@ -323,7 +547,10 @@ testcase-generator/
 ├── scripts/
 │   ├── extract_images.py       # 이미지 추출 (Phase 1)
 │   ├── extract_pptx.py         # PPTX 텍스트/컴포넌트 추출 (Phase 1)
-│   ├── write_excel.py          # Excel 출력 (Phase 4)
+│   ├── plan_chunks.py          # 청크 분할 계획 생성 (Step 2)
+│   ├── merge_tc_chunks.py      # TC 청크 병합 (Step 4)
+│   ├── write_excel.py          # Excel 출력 (Step 5)
+│   ├── validate_and_stats.py   # 검증 + 통계 통합 (Step 5)
 │   ├── run_all.py              # 기존 통합 실행 (레거시)
 │   ├── merge_analysis.py       # 분석 결과 병합 (레거시)
 │   └── generate_testcase.py    # TC 생성 (레거시)
@@ -331,7 +558,11 @@ testcase-generator/
 │   ├── images/                 # 추출된 이미지 (슬라이드별)
 │   ├── image_manifest.json     # 이미지 메타데이터
 │   ├── pptx_data.json          # PPTX 텍스트/컴포넌트 데이터
-│   └── tc_data.json            # Claude가 작성한 TC 데이터
+│   ├── chunk_plan.json         # 청크 분할 계획
+│   ├── tc_chunk_1.json         # 청크별 TC (병렬 처리용)
+│   ├── tc_chunk_2.json
+│   ├── tc_chunk_3.json
+│   └── tc_data.json            # 최종 병합된 TC 데이터
 └── SKILL.md
 ```
 
@@ -345,46 +576,97 @@ testcase-generator/
 | 버전 관리 제외 | .gitignore 자동 생성 |
 | 사용자 경고 | 실행 시 보안 알림 |
 
-## 실행 워크플로우 상세 (에이전트 위임)
+## 실행 워크플로우 상세 (청크 기반)
 
-### 메인 컨텍스트 역할 (간소화)
+### 문서 크기별 처리 방식
+
+| 문서 크기 | 처리 방식 | 에이전트 수 |
+|----------|----------|------------|
+| 15페이지 이하 | 단일 에이전트 | 1 |
+| 16~30페이지 | 2청크 병렬 | 2 |
+| 31~45페이지 | 3청크 병렬 | 3 |
+| 46페이지 이상 | 3청크 + 순차 | 3 (반복) |
+
+### 메인 컨텍스트 역할 (오케스트레이터)
 
 ```
-1. 파일 확인
+1. 파일 확인 및 Phase 1 실행
    - PPTX 파일 존재 확인
-   - 옵션 파싱
+   - 옵션 파싱 (--prefix)
+   - extract_images.py, extract_pptx.py 실행
 
-2. 에이전트 위임
-   - Task 도구로 general-purpose 에이전트 호출
-   - 프롬프트 템플릿에 경로/옵션 채워서 전달
+2. 청크 계획 수립
+   - plan_chunks.py 실행
+   - chunk_plan.json 확인
+   - total_chunks에 따라 처리 방식 결정
 
-3. 결과 출력
-   - 에이전트 반환값 요약 출력
+3. 에이전트 디스패치
+   - 15페이지 이하: 단일 에이전트로 전체 처리
+   - 15페이지 초과: 청크별 에이전트 병렬 실행
+   - Task 도구 호출 시 병렬 실행 위해 한 메시지에 여러 Task
+
+4. 결과 수집 및 병합
+   - 모든 에이전트 완료 대기
+   - merge_tc_chunks.py 실행
+   - tc_data.json 생성
+
+5. 최종 출력
+   - write_excel.py로 Excel 생성
+   - validate_and_stats.py로 검증 + 통계
+   - 요약 출력
 ```
 
-### 에이전트 역할 (전체 TC 생성)
+### 청크 에이전트 역할
 
-에이전트가 Phase 1~4 전체를 자율적으로 수행:
-- `pptx_data.json` 생성
-- 문서 구조 파악
-- TC 작성 및 `tc_data.json` 저장
-- Excel 출력
+각 청크 에이전트가 담당 슬라이드에 대해:
+- 슬라이드 데이터 분석
+- TC 작성 (CHUNK{id}_ 접두사 사용)
+- tc_chunk_{id}.json 저장
 - 요약 반환
 
-## 결과 출력 (간소화)
+## 결과 출력 (청크 기반)
+
+### 소형 문서 (15페이지 이하)
 
 ```
-[TC 생성] 에이전트에게 위임 중...
+[TC 생성] 단일 에이전트 처리 중...
 
 ============================================================
   테스트케이스 생성 완료
 ============================================================
 프로젝트: OnePros (Ver 1.0)
 총 TC: 42개
-- 1P: 32개 TC
-- 2P: 10개 TC
+페이지별: 1P(32), 2P(10)
 크로스 레퍼런스: 5건
 출력: output/OnePros_TestCases.xlsx
+============================================================
+```
+
+### 대용량 문서 (15페이지 초과)
+
+```
+[TC 생성] 청크 기반 병렬 처리 중...
+
+청크 분할 완료: 3개 청크
+  - Chunk 1: 1~15P (15페이지, 45컴포넌트)
+  - Chunk 2: 16~30P (15페이지, 52컴포넌트)
+  - Chunk 3: 31~42P (12페이지, 38컴포넌트)
+
+에이전트 디스패치: 3개 병렬 실행
+
+[Chunk 1] 완료: 45개 TC
+[Chunk 2] 완료: 52개 TC
+[Chunk 3] 완료: 38개 TC
+
+============================================================
+  테스트케이스 생성 완료
+============================================================
+프로젝트: OnePros (Ver 1.0)
+총 TC: 135개 (3청크 병합)
+페이지별: 1P(32), 2P(10), ..., 42P(8)
+크로스 레퍼런스: 12건
+출력: output/OnePros_TestCases.xlsx
+처리 방식: 청크 병렬 (3 에이전트)
 ============================================================
 ```
 
@@ -445,24 +727,31 @@ Claude가 생성하는 TC 데이터 형식 (실제 테스트 결과 기반):
 
 ---
 
-## 자동 실행 체이닝 (에이전트 위임)
+## 자동 실행 체이닝 (청크 기반)
 
 TC 생성 완료 후 자동으로 다음 단계 실행:
 
 ```
 /testcase 실행
     ↓
-[메인] 파일 확인 + 옵션 파싱
+[메인] Phase 1: 이미지/텍스트 추출
     ↓
-[메인] Task 도구로 에이전트 위임
+[메인] Step 2: 청크 계획 수립 (plan_chunks.py)
     ↓
-[에이전트] Phase 1~4 전체 수행
+15페이지 이하? ─Yes→ 단일 에이전트
+    │No
     ↓
-[메인] 에이전트 결과 요약 출력
+[메인] Step 3: 청크 에이전트 병렬 디스패치
     ↓
-/validate-tc 자동 실행 (검증)
+[에이전트들] 청크별 TC 작성 (병렬)
     ↓
-검증 통과 시 → /tc-stats 자동 출력
+[메인] Step 4: 결과 병합 (merge_tc_chunks.py)
+    ↓
+[메인] Step 5: Excel 출력 (write_excel.py)
+    ↓
+[메인] 검증 + 통계 (validate_and_stats.py)
+    ↓
+검증 통과 시 → 완료 요약 출력
 검증 실패 시 → 문제 해결 가이드 자동 참조
 ```
 
@@ -496,14 +785,29 @@ TC 생성 완료 후 자동으로 다음 단계 실행:
 ### 디버깅 명령어
 
 ```bash
-# 이미지 추출만 실행
+# Phase 1: 이미지 추출만 실행
 py extract_images.py "파일.pptx" --output "output" --quiet
 
-# 텍스트/컴포넌트 추출만 실행
+# Phase 1: 텍스트/컴포넌트 추출만 실행
 py extract_pptx.py "파일.pptx" "output/pptx_data.json"
 
-# Excel 출력만 실행
+# Step 2: 청크 계획 확인
+py plan_chunks.py "output/pptx_data.json" --max-pages 15
+
+# Step 4: TC 청크 병합
+py merge_tc_chunks.py "output" --prefix IT_OP
+
+# Step 5: Excel 출력만 실행
 py write_excel.py "output/tc_data.json" "output/test.xlsx"
+
+# Step 5: 검증 + 통계
+py validate_and_stats.py "output/tc_data.json"
+
+# 검증만
+py validate_and_stats.py "output/tc_data.json" --validate-only
+
+# 통계만
+py validate_and_stats.py "output/tc_data.json" --stats-only
 ```
 
 ---

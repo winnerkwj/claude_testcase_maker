@@ -114,6 +114,53 @@ def extract_text_from_shape(shape):
     return ""
 
 
+def parse_raw_text_to_components(raw_texts, slide_number):
+    """raw_text에서 컴포넌트 정보 추출 (테이블 없는 페이지용)"""
+    components = []
+
+    # raw_text를 하나로 합침
+    full_text = " / ".join(raw_texts) if isinstance(raw_texts, list) else raw_texts
+
+    if not full_text or len(full_text.strip()) < 10:
+        return components
+
+    # 섹션 제목과 소제목 추출
+    section_match = re.search(r'(\d{2}\s+[^\n/]+)', full_text)
+    section_title = section_match.group(1).strip() if section_match else ""
+
+    # 소제목 패턴들 (1.1, 1.2, [제목], 등)
+    subtitle_patterns = [
+        r'(\d+\.\d+\s+[^\n/]+)',  # 1.1 제목
+        r'(\[\s*[^\]]+\s*\])',     # [제목]
+        r'(\d+\)\s*[^\n/]+)',      # 1) 제목
+    ]
+
+    found_items = []
+    for pattern in subtitle_patterns:
+        matches = re.findall(pattern, full_text)
+        found_items.extend(matches)
+
+    # 최소한 페이지 전체를 하나의 컴포넌트로 처리
+    if found_items:
+        for idx, item in enumerate(found_items[:10], 1):  # 최대 10개까지
+            components.append({
+                "no": idx,
+                "component": item.strip()[:100],  # 100자 제한
+                "description": "",
+                "source": "raw_text"
+            })
+    else:
+        # 패턴이 없으면 전체 텍스트를 하나의 컴포넌트로
+        components.append({
+            "no": 1,
+            "component": f"Page {slide_number} Content",
+            "description": full_text[:500],  # 500자 제한
+            "source": "raw_text"
+        })
+
+    return components
+
+
 def extract_slide_info(slide, slide_number):
     """슬라이드에서 정보 추출"""
     slide_info = {
@@ -159,6 +206,14 @@ def extract_slide_info(slide, slide_number):
         if re.match(r"^\d{2}\s+", text):
             slide_info["section_title"] = text
             break
+
+    # 컴포넌트가 없지만 raw_text가 있는 경우: raw_text에서 컴포넌트 추출
+    if not slide_info["components"] and slide_info["raw_text"]:
+        raw_components = parse_raw_text_to_components(
+            slide_info["raw_text"],
+            slide_number
+        )
+        slide_info["components"] = raw_components
 
     return slide_info
 

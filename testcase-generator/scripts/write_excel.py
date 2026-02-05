@@ -331,10 +331,27 @@ def create_new_testcase_excel(testcases_data: dict, output_path: Path):
     # 총 컬럼 수 (기본 14 + 회차 15)
     total_cols = len(base_headers) + 15
 
+    def safe_cell_value(value):
+        """openpyxl에서 불법 문자 제거 및 안전한 셀 값 생성
+
+        openpyxl은 XML에서 허용되지 않는 제어 문자를 거부함
+        - ASCII 0x00-0x08, 0x0B-0x0C, 0x0E-0x1F (탭, 줄바꿈 제외)
+        이러한 문자를 제거하여 안전하게 처리
+        """
+        import re
+        if not value:
+            return value
+        str_val = str(value)
+        # XML에서 허용되지 않는 제어 문자 제거 (탭 \x09, 줄바꿈 \x0A, 캐리지리턴 \x0D 제외)
+        # 허용되지 않는 범위: \x00-\x08, \x0B-\x0C, \x0E-\x1F
+        illegal_xml_chars = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f]')
+        clean_val = illegal_xml_chars.sub('', str_val)
+        return clean_val
+
     for idx, tc in enumerate(testcases, start=1):
         row = data_start_row + idx - 1
 
-        # 기본 데이터
+        # 기본 데이터 (safe_cell_value로 예약어 처리)
         sheet.cell(row=row, column=1).value = idx
         sheet.cell(row=row, column=2).value = tc.get("test_case_id", "")
         sheet.cell(row=row, column=3).value = tc.get("depth1", "")
@@ -343,8 +360,8 @@ def create_new_testcase_excel(testcases_data: dict, output_path: Path):
         sheet.cell(row=row, column=6).value = tc.get("depth4", "")
         sheet.cell(row=row, column=7).value = tc.get("title", "")
         sheet.cell(row=row, column=8).value = tc.get("pre_condition", "")
-        sheet.cell(row=row, column=9).value = tc.get("test_step", "")
-        sheet.cell(row=row, column=10).value = tc.get("expected_result", "")
+        sheet.cell(row=row, column=9).value = safe_cell_value(tc.get("test_step", ""))
+        sheet.cell(row=row, column=10).value = safe_cell_value(tc.get("expected_result", ""))
         sheet.cell(row=row, column=11).value = tc.get("requirement_id", "")
         sheet.cell(row=row, column=12).value = tc.get("reference", "")
         sheet.cell(row=row, column=13).value = tc.get("importance", "")
