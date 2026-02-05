@@ -3,6 +3,12 @@ nul
 *.tmp
 ~$*
 
+# Excel and PowerPoint files (전체 프로젝트)
+*.xlsx
+*.pptx
+*.ppt
+*.xls
+
 # Python cache
 __pycache__/
 *.pyc
