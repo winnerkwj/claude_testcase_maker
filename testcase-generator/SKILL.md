@@ -211,6 +211,7 @@ Description: "버튼 클릭 시 환자 정보 팝업 표시.
 | MAX_PAGES_PER_CHUNK | 15 | `TC_MAX_PAGES_PER_CHUNK` | 청크당 최대 페이지 수 |
 | MAX_COMPONENTS_PER_CHUNK | 80 | `TC_MAX_COMPONENTS_PER_CHUNK` | 청크당 최대 컴포넌트 수 |
 | MAX_PARALLEL_AGENTS | 10 | `TC_MAX_PARALLEL_AGENTS` | 동시 실행 에이전트 수 |
+| MIN_CHUNKS | 3 | `TC_MIN_CHUNKS` | 최소 청크 수 (항상 병렬) |
 | DEFAULT_TC_PREFIX | IT_XX | `TC_PREFIX` | TC ID 기본 접두사 |
 
 ### 에이전트 모델 설정
@@ -261,7 +262,7 @@ Task 도구 호출 시:
 
 ## 워크플로우 (청크 기반 병렬 처리)
 
-대용량 문서(15페이지 초과)는 자동으로 청크 분할 처리합니다.
+모든 문서를 자동으로 최소 3청크로 분할하여 병렬 처리합니다.
 
 ### 워크플로우 다이어그램
 
@@ -294,7 +295,7 @@ py extract_pptx.py "{pptx_path}" "{output_dir}/pptx_data.json"
 
 ### Step 2: [메인] 청크 계획 수립
 ```bash
-py plan_chunks.py "{output_dir}/pptx_data.json" --max-pages 15
+py plan_chunks.py "{output_dir}/pptx_data.json" --max-pages 15 --min-chunks 3
 ```
 
 출력: `chunk_plan.json`
@@ -310,8 +311,7 @@ py plan_chunks.py "{output_dir}/pptx_data.json" --max-pages 15
 ```
 
 ### Step 3: [메인] 병렬 에이전트 디스패치
-15페이지 이하 문서: 단일 에이전트로 처리
-15페이지 초과 문서: Task 도구로 청크별 에이전트 **병렬 실행**
+모든 문서: plan_chunks.py 결과(최소 3청크)에 따라 Task 도구로 **항상 병렬 실행**
 
 **중요**: Task 도구 호출 시 한 번의 메시지에 여러 Task 호출을 포함하여 병렬 실행
 
@@ -333,57 +333,7 @@ py validate_and_stats.py "{output_dir}/tc_data.json"
 
 ## 청크 에이전트 프롬프트 템플릿
 
-### 단일 에이전트 (15페이지 이하)
-
-```
-화면정의서 PPTX에서 테스트케이스를 생성해주세요.
-
-PPTX 파일: {pptx_path}
-출력 폴더: {output_dir}
-TC ID 접두사: {prefix}
-스크립트 폴더: {scripts_dir}
-이미지 폴더: {output_dir}/images/
-이미지 매니페스트: {output_dir}/image_manifest.json
-
-### 수행할 작업:
-
-1. **PPTX 데이터 추출** (Phase 1)
-   cd "{scripts_dir}"
-   py extract_images.py "{pptx_path}" --output "{output_dir}" --quiet
-   py extract_pptx.py "{pptx_path}" "{output_dir}/pptx_data.json"
-
-2. **문서 구조 파악** (Phase 2)
-   - {output_dir}/pptx_data.json 읽기
-   - project_info에서 프로젝트명, 버전 추출
-   - all_components에서 컴포넌트 목록 파악
-   - Description 내 [번호] 참조로 크로스 레퍼런스 매핑
-
-3. **🖼️ 이미지 분석** (Phase 2.5) - 필수!
-   - {output_dir}/image_manifest.json에서 슬라이드별 이미지 목록 확인
-   - Read 도구로 {output_dir}/images/slide_*_*.png 이미지 분석
-   - UI 컴포넌트 위치, 레이아웃, 색상 정보 파악
-   - TC 작성 시 이미지에서 파악한 정보 반영
-
-4. **TC 작성** (Phase 3)
-   - 페이지 순서대로 TC 작성
-   - TC ID: {prefix}_001, {prefix}_002, ...
-   - Reference: 1P, 2P, ... (크로스 레퍼런스: "1P (참조: [11-1])")
-   - **이미지 분석 결과 반영**: 정확한 위치, 시각적 변화 명시
-   - {output_dir}/tc_data.json에 저장
-
-5. **Excel 출력** (Phase 4)
-   py write_excel.py "{output_dir}/tc_data.json" "{output_dir}/{project_name}_TestCases.xlsx"
-
-### 반환할 요약:
-- 프로젝트명, 버전
-- 총 TC 수
-- 페이지별 TC 분포
-- 크로스 레퍼런스 현황
-- 분석한 이미지 수
-- 출력 파일 경로
-```
-
-### 청크 에이전트 (병렬 처리용)
+### 청크 에이전트 프롬프트 (병렬 처리용)
 
 ```
 화면정의서의 일부 페이지에 대한 테스트케이스를 생성해주세요.
@@ -1001,10 +951,8 @@ testcase-generator/
 
 | 문서 크기 | 처리 방식 | 에이전트 수 |
 |----------|----------|------------|
-| 15페이지 이하 | 단일 에이전트 | 1 |
-| 16~30페이지 | 2청크 병렬 | 2 |
-| 31~45페이지 | 3청크 병렬 | 3 |
-| 46페이지 이상 | 3청크 + 순차 | 3 (반복) |
+| 모든 문서 | 청크 병렬 | 최소 3 (자동 분할) |
+| 46페이지 이상 | N청크 병렬 | 최대 10 |
 
 ### 메인 컨텍스트 역할 (오케스트레이터)
 
@@ -1020,8 +968,8 @@ testcase-generator/
    - total_chunks에 따라 처리 방식 결정
 
 3. 에이전트 디스패치
-   - 15페이지 이하: 단일 에이전트로 전체 처리
-   - 15페이지 초과: 청크별 에이전트 병렬 실행
+   - plan_chunks.py가 최소 3청크로 분할
+   - 모든 청크를 Task 도구로 병렬 실행
    - Task 도구 호출 시 병렬 실행 위해 한 메시지에 여러 Task
 
 4. 결과 수집 및 병합
@@ -1045,23 +993,7 @@ testcase-generator/
 
 ## 결과 출력 (청크 기반)
 
-### 소형 문서 (15페이지 이하)
-
-```
-[TC 생성] 단일 에이전트 처리 중...
-
-============================================================
-  테스트케이스 생성 완료
-============================================================
-프로젝트: {프로젝트명} (Ver 1.0)
-총 TC: 42개
-페이지별: 1P(32), 2P(10)
-크로스 레퍼런스: 5건
-출력: output/{프로젝트명}_TestCases.xlsx
-============================================================
-```
-
-### 대용량 문서 (15페이지 초과)
+### 결과 출력 예시
 
 ```
 [TC 생성] 청크 기반 병렬 처리 중...
@@ -1155,12 +1087,9 @@ TC 생성 완료 후 자동으로 다음 단계 실행:
     ↓
 [메인] Phase 1: 이미지/텍스트 추출
     ↓
-[메인] Step 2: 청크 계획 수립 (plan_chunks.py)
+[메인] Step 2: 청크 계획 수립 (plan_chunks.py, 최소 3청크)
     ↓
-15페이지 이하? ─Yes→ 단일 에이전트
-    │No
-    ↓
-[메인] Step 3: 청크 에이전트 병렬 디스패치
+[메인] Step 3: 청크 에이전트 병렬 디스패치 (항상 병렬)
     ↓
 [에이전트들] 청크별 TC 작성 (병렬)
     ↓

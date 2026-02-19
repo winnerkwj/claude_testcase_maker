@@ -90,6 +90,9 @@ MAX_COMPONENTS_PER_CHUNK: int = _get_env_int("TC_MAX_COMPONENTS_PER_CHUNK", 80)
 # 동시 실행 최대 에이전트 수
 MAX_PARALLEL_AGENTS: int = _get_env_int("TC_MAX_PARALLEL_AGENTS", 10)
 
+# 최소 청크 수 (항상 이 수 이상의 에이전트로 병렬 처리)
+MIN_CHUNKS: int = _get_env_int("TC_MIN_CHUNKS", 3)
+
 
 # ============================================================
 # TC ID 설정
@@ -195,6 +198,7 @@ def print_config():
     print(f"MAX_PAGES_PER_CHUNK:    {MAX_PAGES_PER_CHUNK}")
     print(f"MAX_COMPONENTS_PER_CHUNK: {MAX_COMPONENTS_PER_CHUNK}")
     print(f"MAX_PARALLEL_AGENTS:    {MAX_PARALLEL_AGENTS}")
+    print(f"MIN_CHUNKS:             {MIN_CHUNKS}")
     print(f"DEFAULT_TC_PREFIX:      {DEFAULT_TC_PREFIX}")
     print("=" * 60)
 

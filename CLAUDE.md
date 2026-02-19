@@ -155,6 +155,7 @@ Claude는 다음 상황에서 적절한 스킬을 자동 실행합니다.
 | MAX_PAGES_PER_CHUNK | 15 | `TC_MAX_PAGES_PER_CHUNK` |
 | MAX_COMPONENTS_PER_CHUNK | 80 | `TC_MAX_COMPONENTS_PER_CHUNK` |
 | MAX_PARALLEL_AGENTS | 10 | `TC_MAX_PARALLEL_AGENTS` |
+| MIN_CHUNKS | 3 | `TC_MIN_CHUNKS` |
 | DEFAULT_TC_PREFIX | IT_XX | `TC_PREFIX` |
 
 ### 에이전트 모델 설정
@@ -168,10 +169,8 @@ Task 도구: model: "opus"
 
 | 문서 크기 | 처리 방식 | 에이전트 수 |
 |----------|----------|------------|
-| 15페이지 이하 | 단일 에이전트 | 1 |
-| 16~30페이지 | 2청크 병렬 | 2 |
-| 31~45페이지 | 3청크 병렬 | 3 |
-| 46~150페이지 | N청크 병렬 | 최대 10 (청크 수만큼) |
+| 모든 문서 | 청크 병렬 | 최소 3 (자동 분할) |
+| 46페이지 이상 | N청크 병렬 | 최대 10 |
 
 ### 자연어 트리거 예시
 ```

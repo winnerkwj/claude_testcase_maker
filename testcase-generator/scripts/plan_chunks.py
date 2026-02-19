@@ -21,12 +21,14 @@ try:
         MAX_PAGES_PER_CHUNK,
         MAX_COMPONENTS_PER_CHUNK,
         MAX_PARALLEL_AGENTS,
+        MIN_CHUNKS,
     )
 except ImportError:
     # config.py를 찾을 수 없는 경우 기본값 사용
     MAX_PAGES_PER_CHUNK = 15
     MAX_COMPONENTS_PER_CHUNK = 80
     MAX_PARALLEL_AGENTS = 10
+    MIN_CHUNKS = 3
 
 
 def load_pptx_data(pptx_data_path: Path) -> Dict[str, Any]:
@@ -136,7 +138,7 @@ def split_section_into_chunks(section: Dict[str, Any], max_pages: int, max_compo
     return chunks
 
 
-def create_chunk_plan(data: Dict[str, Any], max_pages: int = MAX_PAGES_PER_CHUNK) -> Dict[str, Any]:
+def create_chunk_plan(data: Dict[str, Any], max_pages: int = MAX_PAGES_PER_CHUNK, min_chunks: int = MIN_CHUNKS) -> Dict[str, Any]:
     """청크 분할 계획 생성"""
     # 섹션별 그룹화
     sections = group_slides_by_section(data)
@@ -149,6 +151,10 @@ def create_chunk_plan(data: Dict[str, Any], max_pages: int = MAX_PAGES_PER_CHUNK
 
     # 청크 병합 (작은 청크들을 합쳐서 효율성 향상)
     merged_chunks = merge_small_chunks(all_chunks, max_pages, MAX_COMPONENTS_PER_CHUNK)
+
+    # 최소 청크 수 강제 분할 (항상 병렬 처리를 위해)
+    if min_chunks > 1:
+        merged_chunks = force_split_to_min_chunks(merged_chunks, min_chunks)
 
     # 최종 청크 계획 생성
     chunk_plan = {
@@ -221,6 +227,28 @@ def merge_small_chunks(chunks: List[Dict[str, Any]], max_pages: int, max_compone
     return merged
 
 
+def force_split_to_min_chunks(chunks: List[Dict[str, Any]], min_chunks: int) -> List[Dict[str, Any]]:
+    """최소 청크 수에 도달할 때까지 가장 큰 청크를 반으로 분할"""
+    while len(chunks) < min_chunks:
+        # 가장 슬라이드가 많은 청크 찾기
+        largest_idx = max(range(len(chunks)), key=lambda i: len(chunks[i]["slides"]))
+        largest = chunks[largest_idx]
+
+        # 2페이지 이상이어야 분할 가능
+        if len(largest["slides"]) < 2:
+            break
+
+        # 반으로 분할
+        mid = len(largest["slides"]) // 2
+        first_half = {"section": largest["section"], "slides": largest["slides"][:mid]}
+        second_half = {"section": largest["section"], "slides": largest["slides"][mid:]}
+
+        chunks[largest_idx] = first_half
+        chunks.insert(largest_idx + 1, second_half)
+
+    return chunks
+
+
 def save_chunk_plan(chunk_plan: Dict[str, Any], output_path: Path):
     """청크 계획 저장"""
     with open(output_path, "w", encoding="utf-8") as f:
@@ -248,13 +276,14 @@ def print_chunk_summary(chunk_plan: Dict[str, Any]):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python plan_chunks.py <pptx_data.json> [--max-pages N] [--output <path>]")
+        print("Usage: python plan_chunks.py <pptx_data.json> [--max-pages N] [--min-chunks N] [--output <path>]")
         sys.exit(1)
 
     pptx_data_path = Path(sys.argv[1])
 
     # 옵션 파싱
     max_pages = MAX_PAGES_PER_CHUNK
+    min_chunks = MIN_CHUNKS
     output_path = pptx_data_path.parent / "chunk_plan.json"
 
     args = sys.argv[2:]
@@ -262,6 +291,9 @@ def main():
     while i < len(args):
         if args[i] == "--max-pages" and i + 1 < len(args):
             max_pages = int(args[i + 1])
+            i += 2
+        elif args[i] == "--min-chunks" and i + 1 < len(args):
+            min_chunks = int(args[i + 1])
             i += 2
         elif args[i] == "--output" and i + 1 < len(args):
             output_path = Path(args[i + 1])
@@ -277,7 +309,7 @@ def main():
     data = load_pptx_data(pptx_data_path)
 
     # 청크 계획 생성
-    chunk_plan = create_chunk_plan(data, max_pages)
+    chunk_plan = create_chunk_plan(data, max_pages, min_chunks)
 
     # 저장
     save_chunk_plan(chunk_plan, output_path)
