@@ -95,6 +95,15 @@ MIN_CHUNKS: int = _get_env_int("TC_MIN_CHUNKS", 3)
 
 
 # ============================================================
+# Fullpage 이미지 설정
+# ============================================================
+
+# 슬라이드 전체 캡처 해상도 (win32com PowerPoint COM)
+FULLPAGE_WIDTH: int = _get_env_int("TC_FULLPAGE_WIDTH", 1920)
+FULLPAGE_HEIGHT: int = _get_env_int("TC_FULLPAGE_HEIGHT", 1080)
+
+
+# ============================================================
 # TC ID 설정
 # ============================================================
 
@@ -200,6 +209,8 @@ def print_config():
     print(f"MAX_PARALLEL_AGENTS:    {MAX_PARALLEL_AGENTS}")
     print(f"MIN_CHUNKS:             {MIN_CHUNKS}")
     print(f"DEFAULT_TC_PREFIX:      {DEFAULT_TC_PREFIX}")
+    print(f"FULLPAGE_WIDTH:         {FULLPAGE_WIDTH}")
+    print(f"FULLPAGE_HEIGHT:        {FULLPAGE_HEIGHT}")
     print("=" * 60)
 
 

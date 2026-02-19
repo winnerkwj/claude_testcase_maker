@@ -40,17 +40,25 @@ py extract_images.py "<PPTX_파일_경로>" --output "<출력폴더>"
 | 옵션 | 설명 | 기본값 |
 |------|------|--------|
 | `--output`, `-o` | 이미지 출력 폴더 | output/images |
-| `--format`, `-f` | 이미지 포맷 (png/jpg) | png |
-| `--min-size` | 최소 이미지 크기 (px) | 50 |
+| `--quiet`, `-q` | 보안 경고 메시지 생략 | false |
+| `--no-fullpage` | 슬라이드 전체 캡처 건너뛰기 | false |
+
+## 요구사항
+
+- `python-pptx`: PPTX 파싱 및 개별 이미지 추출 (필수)
+- `pywin32`: 슬라이드 전체 캡처 (선택, PowerPoint 설치 필요)
+  - 미설치 시 개별 이미지 추출만 동작 (graceful fallback)
 
 ## 출력 파일
 
 ```
 output/
 ├── images/
-│   ├── slide_01_img_001.png
-│   ├── slide_01_img_002.png
-│   ├── slide_02_img_001.png
+│   ├── slide_01_fullpage.png      # 슬라이드 전체 캡처 (win32com)
+│   ├── slide_02_fullpage.png
+│   ├── slide_01_image_00.png      # 개별 삽입 이미지
+│   ├── slide_01_image_01.png
+│   ├── slide_02_image_00.png
 │   └── ...
 └── image_manifest.json
 ```
@@ -59,20 +67,41 @@ output/
 
 ```json
 {
-  "source": "화면정의서.pptx",
-  "extracted_at": "2026-02-04T12:00:00",
+  "pptx_file": "화면정의서.pptx",
+  "extraction_date": "2026-02-04T12:00:00",
   "total_images": 15,
   "images": [
     {
-      "filename": "slide_01_img_001.png",
+      "filename": "slide_01_image_00.png",
       "slide_number": 1,
-      "slide_title": "Main Layout",
-      "position": {"x": 100, "y": 200, "width": 800, "height": 600},
-      "size_bytes": 45678
+      "content_type": "image/png",
+      "size": {"width_inches": 8.5, "height_inches": 6.0},
+      "position": {"left_inches": 1.0, "top_inches": 2.0}
     }
-  ]
+  ],
+  "fullpage_images": [
+    {
+      "filename": "slide_01_fullpage.png",
+      "path": "절대경로",
+      "slide_number": 1,
+      "image_type": "fullpage",
+      "content_type": "image/png",
+      "size": {"width_px": 1920, "height_px": 1080}
+    }
+  ],
+  "total_fullpage_images": 7,
+  "fullpage_export_method": "win32com",
+  "fullpage_resolution": {"width": 1920, "height": 1080}
 }
 ```
+
+### fullpage_export_method 값
+
+| 값 | 의미 |
+|---|---|
+| `win32com` | 정상 내보내기 성공 |
+| `unavailable` | pywin32 미설치 또는 PowerPoint 미설치 |
+| `skipped` | `--no-fullpage` 옵션으로 건너뜀 |
 
 ## 후속 작업
 

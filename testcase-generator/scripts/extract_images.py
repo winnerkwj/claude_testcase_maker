@@ -27,6 +27,16 @@ from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 
 
+def check_win32com_available() -> bool:
+    """win32com 사용 가능 여부 확인 (pywin32 + PowerPoint 설치 필요)"""
+    try:
+        import win32com.client
+        import pythoncom
+        return True
+    except ImportError:
+        return False
+
+
 def print_security_warning():
     """보안 경고 메시지 출력"""
     print()
@@ -117,6 +127,98 @@ def get_image_extension(content_type: str) -> str:
         "image/x-emf": ".emf",
     }
     return extension_map.get(content_type, ".png")
+
+
+def export_slides_fullpage(pptx_path: Path, output_dir: Path,
+                           width: int = 1920, height: int = 1080) -> list:
+    """win32com COM으로 슬라이드를 통째로 PNG로 내보내기
+
+    PowerPoint Application COM 객체를 사용하여 각 슬라이드를 지정 해상도로 내보냅니다.
+
+    Args:
+        pptx_path: PPTX 파일 절대 경로
+        output_dir: 출력 폴더 경로
+        width: 내보내기 가로 해상도 (px)
+        height: 내보내기 세로 해상도 (px)
+
+    Returns:
+        fullpage 이미지 정보 리스트
+    """
+    import pythoncom
+    import win32com.client
+
+    images_dir = output_dir / "images"
+    images_dir.mkdir(parents=True, exist_ok=True)
+
+    fullpage_images = []
+    ppt = None
+    presentation = None
+
+    try:
+        pythoncom.CoInitialize()
+
+        ppt = win32com.client.Dispatch("PowerPoint.Application")
+        # PowerPoint 창을 표시하지 않음 (백그라운드 실행)
+        ppt.DisplayAlerts = 0
+
+        # PPTX 파일 열기 (ReadOnly=True, WithWindow=False)
+        abs_path = str(pptx_path.resolve())
+        presentation = ppt.Presentations.Open(
+            abs_path,
+            ReadOnly=True,
+            Untitled=False,
+            WithWindow=False
+        )
+
+        slide_count = presentation.Slides.Count
+        print(f"  [Fullpage] {slide_count}개 슬라이드 내보내기 중...")
+
+        for i in range(1, slide_count + 1):
+            filename = f"slide_{i:02d}_fullpage.png"
+            export_path = str((images_dir / filename).resolve())
+
+            try:
+                presentation.Slides(i).Export(export_path, "PNG", width, height)
+
+                image_info = {
+                    "filename": filename,
+                    "path": export_path,
+                    "slide_number": i,
+                    "image_type": "fullpage",
+                    "content_type": "image/png",
+                    "size": {
+                        "width_px": width,
+                        "height_px": height
+                    }
+                }
+                fullpage_images.append(image_info)
+
+            except Exception as e:
+                print(f"  [Fullpage] 슬라이드 {i} 내보내기 실패: {e}")
+
+        print(f"  [Fullpage] {len(fullpage_images)}/{slide_count}개 내보내기 완료")
+
+    except Exception as e:
+        print(f"  [Fullpage] PowerPoint COM 오류: {e}")
+        print(f"  [Fullpage] 개별 이미지 추출만 사용됩니다.")
+
+    finally:
+        try:
+            if presentation:
+                presentation.Close()
+        except Exception:
+            pass
+        try:
+            if ppt:
+                ppt.Quit()
+        except Exception:
+            pass
+        try:
+            pythoncom.CoUninitialize()
+        except Exception:
+            pass
+
+    return fullpage_images
 
 
 def extract_images_from_pptx(pptx_path: Path, output_dir: Path) -> dict:
@@ -214,12 +316,14 @@ def save_manifest(manifest: dict, output_dir: Path):
     return manifest_path
 
 
-def extract_and_save_images(pptx_path: str, output_dir: str = None) -> dict:
+def extract_and_save_images(pptx_path: str, output_dir: str = None,
+                            no_fullpage: bool = False) -> dict:
     """PPTX에서 이미지 추출 및 저장 (메인 함수)
 
     Args:
         pptx_path: PPTX 파일 경로
         output_dir: 출력 폴더 경로 (기본: ./output)
+        no_fullpage: True이면 fullpage 캡처 건너뜀
 
     Returns:
         manifest: 추출 결과 정보
@@ -243,9 +347,42 @@ def extract_and_save_images(pptx_path: str, output_dir: str = None) -> dict:
     # .gitignore 생성
     create_gitignore(output_path)
 
-    # 이미지 추출
+    # 개별 이미지 추출
     print(f"  PPTX 파일: {pptx_path}")
     manifest = extract_images_from_pptx(pptx_path, output_path)
+
+    # Fullpage 슬라이드 캡처
+    if no_fullpage:
+        manifest["fullpage_images"] = []
+        manifest["total_fullpage_images"] = 0
+        manifest["fullpage_export_method"] = "skipped"
+        manifest["fullpage_resolution"] = None
+    elif check_win32com_available():
+        # config에서 해상도 가져오기
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+            from config import FULLPAGE_WIDTH, FULLPAGE_HEIGHT
+        except ImportError:
+            FULLPAGE_WIDTH, FULLPAGE_HEIGHT = 1920, 1080
+
+        print(f"  [Fullpage] win32com 사용 가능 ({FULLPAGE_WIDTH}x{FULLPAGE_HEIGHT})")
+        fullpage_images = export_slides_fullpage(
+            pptx_path, output_path, FULLPAGE_WIDTH, FULLPAGE_HEIGHT
+        )
+        manifest["fullpage_images"] = fullpage_images
+        manifest["total_fullpage_images"] = len(fullpage_images)
+        manifest["fullpage_export_method"] = "win32com"
+        manifest["fullpage_resolution"] = {
+            "width": FULLPAGE_WIDTH,
+            "height": FULLPAGE_HEIGHT
+        }
+    else:
+        print("  [Fullpage] win32com 미설치 - fullpage 캡처 건너뜀")
+        print("  [Fullpage] 설치: pip install pywin32")
+        manifest["fullpage_images"] = []
+        manifest["total_fullpage_images"] = 0
+        manifest["fullpage_export_method"] = "unavailable"
+        manifest["fullpage_resolution"] = None
 
     # manifest 저장
     manifest_path = save_manifest(manifest, output_path)
@@ -299,6 +436,12 @@ def main():
         help="보안 경고 메시지 생략"
     )
 
+    parser.add_argument(
+        "--no-fullpage",
+        action="store_true",
+        help="슬라이드 전체 캡처(fullpage) 건너뛰기"
+    )
+
     args = parser.parse_args()
 
     # cleanup 모드
@@ -321,7 +464,8 @@ def main():
     try:
         manifest = extract_and_save_images(
             pptx_path=args.pptx_file,
-            output_dir=args.output_dir
+            output_dir=args.output_dir,
+            no_fullpage=args.no_fullpage
         )
 
         print()
@@ -329,17 +473,14 @@ def main():
         print("  추출 결과 요약")
         print("-" * 60)
         print(f"  입력 파일      : {manifest['pptx_file']}")
-        print(f"  추출된 이미지  : {manifest['total_images']}개")
+        print(f"  개별 이미지    : {manifest['total_images']}개")
+        fullpage_count = manifest.get('total_fullpage_images', 0)
+        fullpage_method = manifest.get('fullpage_export_method', 'unavailable')
+        print(f"  Fullpage 이미지: {fullpage_count}개 ({fullpage_method})")
         print(f"  출력 폴더      : {manifest['output_dir']}")
         print("-" * 60)
         print()
         print("[추출] 완료!")
-        print()
-        print("다음 단계:")
-        print("  1. Claude Code에서 이미지 분석 요청")
-        print('     "output/images 폴더의 이미지들을 분석해줘"')
-        print("  2. 분석 결과로 TC 생성")
-        print('     py run_all.py "화면정의서.pptx" --with-analysis "output/image_analysis.json"')
 
         return 0
 

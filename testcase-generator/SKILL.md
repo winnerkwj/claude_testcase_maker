@@ -358,13 +358,16 @@ TC ID 접두사: {prefix}
 
 **반드시 담당 슬라이드의 이미지를 분석하여 TC에 반영하세요.**
 
-1. **image_manifest.json 확인**
-   - 담당 슬라이드 번호에 해당하는 이미지 목록 확인
-   - 예: slide_5_image_1.png, slide_5_image_2.png
+1. **Fullpage 이미지 최우선 분석** ⭐
+   - `{output_dir}/images/slide_{번호}_fullpage.png` 파일을 Read 도구로 읽기
+   - 슬라이드 전체 캡처이므로 **도형, 화살표, 표, 레이아웃** 모두 포함
+   - image_manifest.json의 `fullpage_images` 배열에서 담당 슬라이드 확인
+   - fullpage가 없으면 개별 이미지만 분석
 
-2. **이미지 읽기 (Read 도구 사용)**
-   - `{output_dir}/images/slide_{번호}_*.png` 파일을 Read 도구로 읽기
-   - Claude는 이미지를 직접 분석할 수 있음
+2. **개별 이미지 보조 분석**
+   - `{output_dir}/images/slide_{번호}_image_*.png` 파일을 Read 도구로 읽기
+   - image_manifest.json의 `images` 배열에서 담당 슬라이드 확인
+   - fullpage 이미지의 상세 보충용 (고해상도 개별 UI 요소)
 
 3. **이미지에서 파악할 정보**
    - UI 컴포넌트 위치 (좌측상단, 우측하단, 중앙 등)
@@ -372,6 +375,7 @@ TC ID 접두사: {prefix}
    - 화면 레이아웃 구조 (헤더, 사이드바, 메인 영역)
    - 색상 정보 (배경색, 강조색)
    - 텍스트 라벨 확인
+   - 도형/화살표로 표현된 흐름/관계 (fullpage에서만 확인 가능)
 
 4. **TC에 반영할 내용**
    - Test Step에 정확한 위치 명시: "화면 우측 상단의 [X] 버튼 클릭"

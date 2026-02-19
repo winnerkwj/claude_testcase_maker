@@ -77,6 +77,19 @@ excel:
   num_test_rounds: 3
 
 # ------------------------------------------------------------
+# Fullpage 이미지 설정
+# ------------------------------------------------------------
+fullpage:
+  # 슬라이드 전체 캡처 해상도 (win32com PowerPoint COM)
+  width: 1920      # 환경변수: TC_FULLPAGE_WIDTH
+  height: 1080     # 환경변수: TC_FULLPAGE_HEIGHT
+
+  # 요구사항:
+  # - pywin32 패키지 (pip install pywin32)
+  # - Microsoft PowerPoint 설치
+  # - 미설치 시 개별 이미지 추출만 동작 (graceful fallback)
+
+# ------------------------------------------------------------
 # 환경변수 오버라이드
 # ------------------------------------------------------------
 # 다음 환경변수로 설정을 오버라이드할 수 있습니다:
@@ -87,6 +100,8 @@ excel:
 # TC_MAX_COMPONENTS_PER_CHUNK - 청크당 최대 컴포넌트 수
 # TC_MAX_PARALLEL_AGENTS    - 동시 실행 에이전트 수
 # TC_PREFIX             - TC ID 기본 접두사
+# TC_FULLPAGE_WIDTH     - Fullpage 이미지 가로 해상도
+# TC_FULLPAGE_HEIGHT    - Fullpage 이미지 세로 해상도
 #
 # 예시 (Windows):
 #   set TC_OUTPUT_DIR=D:\output
