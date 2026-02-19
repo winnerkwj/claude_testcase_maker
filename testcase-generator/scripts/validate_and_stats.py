@@ -57,16 +57,19 @@ def validate_tc_id_sequence(testcases: List[Dict[str, Any]]) -> Tuple[bool, List
 
 
 def validate_depth_completeness(testcases: List[Dict[str, Any]]) -> Tuple[bool, List[str]]:
-    """Depth 완전성 검증"""
+    """Depth 완전성 검증 (depth4는 빈 문자열 허용 - 시나리오 기반)"""
     errors = []
-    depth_fields = ["depth1", "depth2", "depth3", "depth4"]
+    required_fields = ["depth1", "depth2", "depth3"]
 
     for idx, tc in enumerate(testcases, start=1):
         tc_id = tc.get("test_case_id", f"행 {idx}")
-        for field in depth_fields:
+        for field in required_fields:
             value = tc.get(field, "").strip()
             if not value:
                 errors.append(f"{tc_id}: {field} 누락")
+        # depth4는 키가 존재하지 않으면 누락으로 판단 (빈 문자열은 허용)
+        if "depth4" not in tc:
+            errors.append(f"{tc_id}: depth4 키 없음")
 
     is_valid = len(errors) == 0
     return is_valid, errors[:10]  # 최대 10개만 표시
@@ -134,7 +137,7 @@ def validate_test_step_quality(testcases: List[Dict[str, Any]]) -> Tuple[bool, L
     missing_entry_count = 0
 
     location_keywords = ["좌측", "우측", "상단", "하단", "중앙", "영역", "왼쪽", "오른쪽"]
-    entry_keywords = ["진입", "화면 진입", "탭 진입", "탭 화면"]
+    entry_keywords = ["진입", "화면 진입", "탭 진입", "탭 화면", "프로그램 실행", "화면 확인", "화면에서", "팝업 표시", "팝업창"]
 
     for idx, tc in enumerate(testcases, start=1):
         tc_id = tc.get("test_case_id", f"행 {idx}")
@@ -323,7 +326,7 @@ def count_step_quality_stats(testcases: List[Dict[str, Any]]) -> Dict[str, Any]:
     entry_count = 0
 
     location_keywords = ["좌측", "우측", "상단", "하단", "중앙", "영역", "왼쪽", "오른쪽"]
-    entry_keywords = ["진입", "화면 진입", "탭 진입", "탭 화면"]
+    entry_keywords = ["진입", "화면 진입", "탭 진입", "탭 화면", "프로그램 실행", "화면 확인", "화면에서", "팝업 표시", "팝업창"]
 
     for tc in testcases:
         test_step = tc.get("test_step", "").strip()
