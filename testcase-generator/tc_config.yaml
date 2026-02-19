@@ -1,0 +1,97 @@
+# ============================================================
+# 테스트케이스 생성기 설정 (Claude용 문서)
+# ============================================================
+# 이 파일은 Claude가 참조하는 설정 문서입니다.
+# 실제 설정값은 config.py에서 관리되며, 환경변수로 오버라이드 가능합니다.
+
+# ------------------------------------------------------------
+# 경로 설정
+# ------------------------------------------------------------
+paths:
+  # 프로젝트 루트 (CLAUDE.md 위치 기준 자동 감지)
+  project_root: "{PROJECT_ROOT}"
+
+  # 출력 디렉토리 (환경변수: TC_OUTPUT_DIR)
+  output_dir: "{PROJECT_ROOT}/output"
+
+  # 스크립트 디렉토리
+  scripts_dir: "{PROJECT_ROOT}/testcase-generator/scripts"
+
+  # 템플릿 파일
+  template: "{PROJECT_ROOT}/testcase-generator/assets/template.xlsx"
+
+# ------------------------------------------------------------
+# 청크 처리 설정
+# ------------------------------------------------------------
+chunk_settings:
+  # 청크당 최대 페이지 수 (환경변수: TC_MAX_PAGES_PER_CHUNK)
+  max_pages_per_chunk: 15
+
+  # 청크당 최대 컴포넌트 수 (환경변수: TC_MAX_COMPONENTS_PER_CHUNK)
+  max_components_per_chunk: 80
+
+  # 동시 실행 최대 에이전트 수 (환경변수: TC_MAX_PARALLEL_AGENTS)
+  max_parallel_agents: 10
+
+# ------------------------------------------------------------
+# TC ID 설정
+# ------------------------------------------------------------
+tc_id:
+  # 기본 접두사 (환경변수: TC_PREFIX)
+  # 형식: IT_{PREFIX}_001, IT_{PREFIX}_002, ...
+  default_prefix: "IT_XX"
+
+  # 접두사 예시
+  # - IT_OP: 예시 프로젝트
+  # - IT_XX: 범용/미지정
+  # - IT_LM: 사용자 정의
+
+# ------------------------------------------------------------
+# Excel 출력 설정
+# ------------------------------------------------------------
+excel:
+  # 색상 코드 (16진수 RGB)
+  colors:
+    header: "4472C4"        # 진한 파랑
+    subheader: "5B9BD5"     # 연한 파랑
+    summary: "D9E2F3"       # 아주 연한 파랑
+    round1: "70AD47"        # 녹색 (1차 테스트)
+    round2: "FFC000"        # 주황 (2차 테스트)
+    round3: "ED7D31"        # 빨강 (3차 테스트)
+    blank_field: "FFFF00"   # 노란색 (공란 표시)
+
+  # 드롭다운 옵션
+  result_options:
+    - Pass
+    - Fail
+    - N/T
+    - Block
+
+  severity_options:
+    - Critical
+    - Major
+    - Minor
+    - Trivial
+
+  # 테스트 회차 수
+  num_test_rounds: 3
+
+# ------------------------------------------------------------
+# 환경변수 오버라이드
+# ------------------------------------------------------------
+# 다음 환경변수로 설정을 오버라이드할 수 있습니다:
+#
+# TC_PROJECT_ROOT       - 프로젝트 루트 경로
+# TC_OUTPUT_DIR         - 출력 디렉토리 경로
+# TC_MAX_PAGES_PER_CHUNK    - 청크당 최대 페이지 수
+# TC_MAX_COMPONENTS_PER_CHUNK - 청크당 최대 컴포넌트 수
+# TC_MAX_PARALLEL_AGENTS    - 동시 실행 에이전트 수
+# TC_PREFIX             - TC ID 기본 접두사
+#
+# 예시 (Windows):
+#   set TC_OUTPUT_DIR=D:\output
+#   set TC_PREFIX=IT_MY
+#
+# 예시 (Linux/Mac):
+#   export TC_OUTPUT_DIR=/home/user/output
+#   export TC_PREFIX=IT_MY

@@ -75,19 +75,19 @@
 
 ✓ TC ID 연속성: 정상
 ✗ TC ID 중복: 1건 발견
-  - IT_OP_015: 행 20, 35에서 중복
+  - IT_{PREFIX}_015: 행 20, 35에서 중복
 ✓ Depth 완전성: 정상
 ✗ 형식 오류: 2건
-  - IT_OP_023: Expected Result '#' 누락 (행 28)
-  - IT_OP_041: Reference 페이지 번호 누락 (행 46)
+  - IT_{PREFIX}_023: Expected Result '#' 누락 (행 28)
+  - IT_{PREFIX}_041: Reference 페이지 번호 누락 (행 46)
 ✓ 데이터 무결성: 정상
 
 검증 결과: ❌ 실패 (3/5 항목)
 ------------------------------------------------------------
 수정 필요 항목:
-1. IT_OP_015 중복 ID 수정
-2. IT_OP_023 Expected Result에 '#' 추가
-3. IT_OP_041 Reference에 페이지 번호 추가
+1. IT_{PREFIX}_015 중복 ID 수정
+2. IT_{PREFIX}_023 Expected Result에 '#' 추가
+3. IT_{PREFIX}_041 Reference에 페이지 번호 추가
 ------------------------------------------------------------
 ```
 

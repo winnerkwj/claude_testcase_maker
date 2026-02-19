@@ -28,9 +28,12 @@
 Task 도구로 Bash 에이전트에게 위임:
 
 ```bash
-cd "C:\Users\Osstem\Desktop\testcasemaker V 2.0\testcase-generator\scripts"
+# {PROJECT_ROOT}는 CLAUDE.md가 있는 프로젝트 루트 경로
+cd "{PROJECT_ROOT}/testcase-generator/scripts"
 py extract_images.py "<PPTX_파일_경로>" --output "<출력폴더>"
 ```
+
+스크립트 경로는 `config.py`의 `SCRIPTS_DIR`에서 자동 감지됩니다.
 
 ### 옵션
 

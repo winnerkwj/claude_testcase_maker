@@ -14,10 +14,19 @@ import sys
 from pathlib import Path
 from typing import List, Dict, Any
 
-# 청크 분할 설정
-MAX_PAGES_PER_CHUNK = 15
-MAX_COMPONENTS_PER_CHUNK = 80
-MAX_PARALLEL_AGENTS = 3
+# 중앙 설정에서 가져오기
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+try:
+    from config import (
+        MAX_PAGES_PER_CHUNK,
+        MAX_COMPONENTS_PER_CHUNK,
+        MAX_PARALLEL_AGENTS,
+    )
+except ImportError:
+    # config.py를 찾을 수 없는 경우 기본값 사용
+    MAX_PAGES_PER_CHUNK = 15
+    MAX_COMPONENTS_PER_CHUNK = 80
+    MAX_PARALLEL_AGENTS = 10
 
 
 def load_pptx_data(pptx_data_path: Path) -> Dict[str, Any]:

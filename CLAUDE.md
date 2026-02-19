@@ -5,7 +5,7 @@
 
 ## 빠른 시작
 ```bash
-/testcase "예시파일/One v1.0 화면정의서_예시파일.pptx"
+/testcase "{입력파일}.pptx" --prefix IT_{PREFIX}
 ```
 
 ## 주요 명령어
@@ -18,16 +18,20 @@
 | `/validate-tc [파일]` | `/vtc` | TC 품질 검증 |
 | `/tc-stats [파일]` | `/stats` | TC 통계 및 분포 분석 |
 
-## 출력 경로 (고정)
+## 출력 경로
 
-**모든 TC 산출물은 아래 경로에 저장**:
+**모든 TC 산출물은 프로젝트 루트의 output 폴더에 저장**:
 ```
-C:\Users\Osstem\Desktop\testcasemaker V 2.0\output
+{PROJECT_ROOT}/output
 ```
+
+설정값은 `testcase-generator/config.py`에서 관리하며, 환경변수 `TC_OUTPUT_DIR`로 오버라이드 가능.
 
 ## 프로젝트 구조
 ```
 testcase-generator/
+├── config.py                   # 🆕 중앙 설정 파일 (경로, 상수)
+├── tc_config.yaml              # 🆕 설정 문서 (Claude용)
 ├── scripts/
 │   ├── extract_images.py       # 이미지 추출 (Phase 1)
 │   ├── extract_pptx.py         # PPTX 텍스트/컴포넌트 추출 (Phase 1)
@@ -39,13 +43,6 @@ testcase-generator/
 │   ├── merge_analysis.py       # 분석 결과 병합 (레거시)
 │   └── generate_testcase.py    # TC 생성 (레거시)
 ├── assets/template.xlsx        # 템플릿
-├── output/                     # 출력 폴더
-│   ├── images/                 # 추출된 이미지
-│   ├── image_manifest.json     # 이미지 메타데이터
-│   ├── pptx_data.json          # PPTX 텍스트/컴포넌트 데이터
-│   ├── chunk_plan.json         # 청크 분할 계획
-│   ├── tc_chunk_*.json         # 청크별 TC (병렬 처리용)
-│   └── tc_data.json            # 최종 병합된 TC 데이터
 ├── notes/                      # 학습 기록
 │   ├── issues.md               # 이슈 및 해결책
 │   ├── patterns.md             # 패턴/안티패턴
@@ -54,33 +51,41 @@ testcase-generator/
 ├── SKILL-extract-images.md     # 이미지 추출 스킬
 ├── SKILL-validate-tc.md        # TC 검증 스킬
 └── SKILL-tc-stats.md           # TC 통계 스킬
+
+output/                         # 출력 폴더 (프로젝트 루트에 위치)
+├── images/                     # 추출된 이미지
+├── image_manifest.json         # 이미지 메타데이터
+├── pptx_data.json              # PPTX 텍스트/컴포넌트 데이터
+├── chunk_plan.json             # 청크 분할 계획
+├── tc_chunk_*.json             # 청크별 TC (병렬 처리용)
+└── tc_data.json                # 최종 병합된 TC 데이터
 ```
 
 ## TC ID 형식
 ```
-IT_[PREFIX]_[NUM]
-예: IT_OP_001, IT_OP_002, IT_OP_003
+IT_{PREFIX}_{NUM}
+예: IT_XX_001, IT_XX_002, IT_XX_003
 ```
+- 기본 접두사: `IT_XX` (환경변수 `TC_PREFIX`로 오버라이드 가능)
 - 문서 전체에서 연속 번호 사용
 - 페이지별로 초기화하지 않음
 
-## Depth 구조
+## Depth 구조 (시나리오 기반)
 
 | Depth | 역할 | 예시 |
 |-------|------|------|
-| Depth 1 | 대분류 | Main Layout, 기능 영역 |
-| Depth 2 | 중분류 | 공통 Layout 및 Tool |
-| Depth 3 | 소분류 | Title, Save Button |
-| Depth 4 | 테스트 항목 | 표시 확인, 기능 확인 |
+| Depth 1 | 대분류 | Main Layout, Worklist |
+| Depth 2 | 중분류/섹션 | 공통 Layout 및 Tool, 환자 관리 |
+| Depth 3 | 기능 영역 | 공통레이아웃, Common Tool |
+| Depth 4 | 조건/상태 (선택) | 작업내역 없음, 작업내역 있음, "" |
 
-## 테스트 유형 (Depth 4)
-- 표시 확인: UI 표시 테스트
-- 기능 확인: 기능 동작 테스트
-- Hover 확인: 마우스오버/툴팁
-- 유효성 확인: 입력 검증
-- 경계값 확인: 최소/최대값
-- 선택 확인: 목록 항목 선택
-- 닫기 확인: 팝업 닫기
+## Depth 4 작성 규칙
+**조건/상태 기반** (테스트 유형 아님):
+- `작업내역 없음` / `작업내역 있음`: 저장 관련 테스트
+- `환자 미선택` / `환자 선택됨`: 환자 관련 테스트
+- `""` (빈 문자열): 특별한 조건 없을 때
+
+**❌ 금지**: "표시 확인", "기능 확인", "Hover 확인" (컴포넌트 나열식)
 
 ## Excel 출력 구조
 
@@ -121,7 +126,7 @@ Claude는 다음 상황에서 적절한 스킬을 자동 실행합니다.
 ### 청크 기반 병렬 처리 워크플로우
 
 ```
-사용자: "One v1.0 화면정의서.pptx로 TC 만들어줘"
+사용자: "{화면정의서}.pptx로 TC 만들어줘"
 → /testcase 자동 실행
 
 [메인 컨텍스트 - 오케스트레이터]
@@ -143,11 +148,14 @@ Claude는 다음 상황에서 적절한 스킬을 자동 실행합니다.
 
 ### 청크 분할 기준
 
-| 설정 | 값 | 설명 |
-|------|-----|------|
-| MAX_PAGES_PER_CHUNK | 15 | 청크당 최대 페이지 수 |
-| MAX_COMPONENTS_PER_CHUNK | 80 | 청크당 최대 컴포넌트 수 |
-| MAX_PARALLEL_AGENTS | 10 | 동시 실행 에이전트 수 (청크 수에 맞게 확장) |
+설정값은 `testcase-generator/config.py`에서 관리 (환경변수로 오버라이드 가능):
+
+| 설정 | 기본값 | 환경변수 |
+|------|--------|----------|
+| MAX_PAGES_PER_CHUNK | 15 | `TC_MAX_PAGES_PER_CHUNK` |
+| MAX_COMPONENTS_PER_CHUNK | 80 | `TC_MAX_COMPONENTS_PER_CHUNK` |
+| MAX_PARALLEL_AGENTS | 10 | `TC_MAX_PARALLEL_AGENTS` |
+| DEFAULT_TC_PREFIX | IT_XX | `TC_PREFIX` |
 
 ### 에이전트 모델 설정
 
@@ -167,7 +175,7 @@ Task 도구: model: "opus"
 
 ### 자연어 트리거 예시
 ```
-사용자: "One v1.0 화면정의서.pptx로 TC 만들어줘"
+사용자: "{화면정의서}.pptx로 TC 만들어줘"
 → /testcase 자동 실행 (청크 기반 병렬 처리)
 
 사용자: "이 PPTX에서 이미지 추출해줘"
@@ -179,51 +187,67 @@ Task 도구: model: "opus"
 
 ---
 
-## TC 품질 기준 (수작업 TC 수준)
+## TC 품질 기준 (시나리오 기반)
 
-### Pre-condition 규칙
+### 🔴 시나리오 기반 TC 작성 (핵심!)
 
-| 상황 | Pre-condition 형식 |
-|------|-------------------|
-| 일반 기능 | 환자선택 > 모든작업이 완료된 Case 정상 로드 |
-| 특정 단계 | {단계명} 단계 진입 상태 |
-| 팝업 테스트 | {팝업명} 팝업이 표시된 상태 |
-| 조건부 | 작업내역 있음 / 작업내역 없음 |
-
-**❌ 금지**: `"OnePros 프로그램이 실행되어 있음"` (너무 일반적)
-**✅ 권장**: `"환자선택 > 모든작업이 완료된 Case 정상 로드"`
-
-### UI 경로 규칙
-
-Test Step에 **화면 영역 위치 명시 필수**:
-
-| 영역 | 위치 | 포함 요소 |
-|------|------|----------|
-| 좌측 | Common Tool | View 버튼, Zoom, Pan, Color map |
-| 우측 | Task Tool | 단계별 도구, Property |
-| 상단 | 단계 버튼 | Alignment, Orientation, Design 등 |
-
-**Test Step 형식**:
+**❌ 컴포넌트 나열식 (금지)**:
 ```
-1. 각 단계 선택 후 진입
-2. 좌측 Common Tool 확인
-3. {버튼명} 버튼 클릭
+- Save 버튼 표시 확인
+- Save 버튼 기능 확인
+- Save 버튼 Hover 확인
 ```
 
-### 단축키 통합 규칙
+**✅ 시나리오 기반 (권장)**:
+```
+- 저장 확인 팝업창 (닫기 버튼 클릭 시)
+- 저장 확인 팝업창[Save] 버튼
+- 저장 확인 팝업창[Don't Save] 버튼
+- 저장 확인 팝업창[Cancel] 버튼
+- 저장 단축키 입력 (Ctrl+S)
+```
 
-Expected Result에 관련 단축키 포함:
+### Title 형식 (시나리오 기반)
 
-**단일 기능**:
+| 패턴 | 예시 |
+|------|------|
+| 팝업 트리거 | `저장 확인 팝업창` |
+| 팝업 내 버튼 | `저장 확인 팝업창[Save] 버튼` |
+| 단축키 동작 | `저장 단축키 입력` |
+| 기능 동작 | `Top View 전환`, `프로젝트 추가` |
+
+### Pre-condition 규칙 (선택적)
+
+| 상황 | Pre-condition |
+|------|---------------|
+| 일반 기능 | `""` (빈 문자열) |
+| 팝업 내 테스트 | `저장 확인 팝업창이 표시된 상태` |
+| 특정 상태 필요 | `환자선택 > Case 정상 로드` |
+
+**❌ 금지**: 모든 TC에 일괄적으로 Pre-condition 채우기
+
+### Test Step 형식 (구체적 동작)
+
+**필수 규칙:**
+- 모든 TC 최소 2단계, 팝업 내 버튼은 3단계 필수
+- Step 1은 반드시 진입 동작: "{화면/탭명} 화면 진입"
+- 위치 서술자 필수: "좌측 Common Tool 영역의 Save 버튼 클릭"
+- 단일 스텝 TC 금지 (목표: 0%)
+
 ```
-# Top view로 전환됨 (단축키: Numpad 8)
+1. Alignment 탭 화면 진입
+2. 우측 상단 닫기 버튼 클릭
+3. 팝업창 Save 버튼 클릭
 ```
 
-**여러 기능 통합**:
+### Expected Result 형식
+
 ```
-# 각 버튼 클릭 시 해당 뷰로 전환됨
-  Top:Num8, Front:Num1, Rear:Num3, Bottom:Num2, Left:Num4, Right:Num6
+# 현재 진행중인 상태가 프로젝트에 저장됨
+# 저장된 프로젝트 로드시 저장 당시화면 그대로 로드됨
 ```
+
+- 단축키 포함 가능: `# Top view로 전환됨 (단축키: Numpad 8)`
 
 ---
 
@@ -290,6 +314,8 @@ Expected Result에 관련 단축키 포함:
 | Excel에 Test Step 없음 | 필드명 불일치 | merge_tc_chunks.py 재실행 |
 | **이미지 분석 누락** | 에이전트 프롬프트 누락 | 에이전트에게 이미지 분석 명시적 지시 |
 | TC에 위치 정보 없음 | 이미지 미분석 | output/images/ 이미지 Read 후 TC 재작성 |
+| **컴포넌트 나열식 TC** | 시나리오 기반 미준수 | 시나리오 흐름으로 TC 그룹화 |
+| **기존 TC 패턴 재사용** | 이전 분석 결과 참조 | 매번 pptx_data.json과 이미지 새로 분석 |
 
 ---
 
@@ -305,6 +331,9 @@ TC 생성 완료 후 필수 확인:
 - [ ] 한글 정상 표시
 - [ ] 드롭다운 목록 정상 작동 (Pass/Fail/N/T/Block)
 - [ ] 템플릿 서식 유지 (셀 너비, 색상)
+- [ ] Test Step 최소 2단계 (단일 스텝 TC 0%)
+- [ ] 위치 서술자 포함율 70% 이상
+- [ ] 진입 동작 포함율 70% 이상
 
 ---
 
@@ -408,7 +437,7 @@ py extract_pptx.py "파일.pptx" "output/pptx_data.json"
 py plan_chunks.py "output/pptx_data.json" --max-pages 15
 
 # Step 4: TC 청크 병합
-py merge_tc_chunks.py "output" --prefix IT_OP
+py merge_tc_chunks.py "output" --prefix IT_{PREFIX}
 
 # Step 5: Excel 출력만 실행
 py write_excel.py "output/tc_data.json" "output/test.xlsx"

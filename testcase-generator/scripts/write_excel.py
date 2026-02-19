@@ -14,6 +14,39 @@ from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.comments import Comment
 
+# 중앙 설정에서 가져오기
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+try:
+    from config import (
+        EXCEL_COLORS,
+        RESULT_OPTIONS,
+        SEVERITY_OPTIONS,
+        BASE_COLUMNS,
+        ROUND_SUBCOLUMNS,
+        NUM_TEST_ROUNDS,
+    )
+except ImportError:
+    # config.py를 찾을 수 없는 경우 기본값 사용
+    EXCEL_COLORS = {
+        "header": "4472C4",
+        "subheader": "5B9BD5",
+        "summary": "D9E2F3",
+        "round1": "70AD47",
+        "round2": "FFC000",
+        "round3": "ED7D31",
+        "blank_field": "FFFF00",
+    }
+    RESULT_OPTIONS = ["Pass", "Fail", "N/T", "Block"]
+    SEVERITY_OPTIONS = ["Critical", "Major", "Minor", "Trivial"]
+    BASE_COLUMNS = [
+        ("No", 5), ("Test Case ID", 15), ("Depth 1", 12), ("Depth 2", 18),
+        ("Depth 3", 15), ("Depth 4", 12), ("Title", 25), ("Pre-condition", 20),
+        ("Test Step", 45), ("Expected Result", 45), ("요구사항 ID", 12),
+        ("Reference", 10), ("중요도", 8), ("Writer", 10),
+    ]
+    ROUND_SUBCOLUMNS = ["Result", "Severity", "Comments", "Issue #", "Tester"]
+    NUM_TEST_ROUNDS = 3
+
 
 # 기본 컬럼 매핑 (0-indexed)
 DEFAULT_COLUMN_MAP = {
@@ -197,14 +230,14 @@ def create_new_testcase_excel(testcases_data: dict, output_path: Path):
     version = project_info.get("version", "v1.0")
     total_tc = testcases_data.get("total_testcases", 0)
 
-    # 색상 정의
-    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
-    subheader_fill = PatternFill(start_color="5B9BD5", end_color="5B9BD5", fill_type="solid")
-    round1_fill = PatternFill(start_color="70AD47", end_color="70AD47", fill_type="solid")  # 녹색
-    round2_fill = PatternFill(start_color="FFC000", end_color="FFC000", fill_type="solid")  # 주황
-    round3_fill = PatternFill(start_color="ED7D31", end_color="ED7D31", fill_type="solid")  # 빨강
-    summary_fill = PatternFill(start_color="D9E2F3", end_color="D9E2F3", fill_type="solid")
-    blank_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")  # 노란색 (공란 표시)
+    # 색상 정의 (중앙 설정에서 가져옴)
+    header_fill = PatternFill(start_color=EXCEL_COLORS["header"], end_color=EXCEL_COLORS["header"], fill_type="solid")
+    subheader_fill = PatternFill(start_color=EXCEL_COLORS["subheader"], end_color=EXCEL_COLORS["subheader"], fill_type="solid")
+    round1_fill = PatternFill(start_color=EXCEL_COLORS["round1"], end_color=EXCEL_COLORS["round1"], fill_type="solid")
+    round2_fill = PatternFill(start_color=EXCEL_COLORS["round2"], end_color=EXCEL_COLORS["round2"], fill_type="solid")
+    round3_fill = PatternFill(start_color=EXCEL_COLORS["round3"], end_color=EXCEL_COLORS["round3"], fill_type="solid")
+    summary_fill = PatternFill(start_color=EXCEL_COLORS["summary"], end_color=EXCEL_COLORS["summary"], fill_type="solid")
+    blank_fill = PatternFill(start_color=EXCEL_COLORS["blank_field"], end_color=EXCEL_COLORS["blank_field"], fill_type="solid")
 
     header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
     thin_border = Border(
@@ -243,26 +276,14 @@ def create_new_testcase_excel(testcases_data: dict, output_path: Path):
     header_row1 = 5
     header_row2 = 6
 
-    # 기본 컬럼 (A~N)
-    base_headers = [
-        ("A", "No", 5),
-        ("B", "Test Case ID", 15),
-        ("C", "Depth 1", 12),
-        ("D", "Depth 2", 18),
-        ("E", "Depth 3", 15),
-        ("F", "Depth 4", 12),
-        ("G", "Title", 25),
-        ("H", "Pre-condition", 20),
-        ("I", "Test Step", 45),
-        ("J", "Expected Result", 45),
-        ("K", "요구사항 ID", 12),
-        ("L", "Reference", 10),
-        ("M", "중요도", 8),
-        ("N", "Writer", 10),
-    ]
+    # 기본 컬럼 (중앙 설정에서 가져옴)
+    base_headers = []
+    for idx, (name, width) in enumerate(BASE_COLUMNS):
+        col_letter = get_column_letter(idx + 1)
+        base_headers.append((col_letter, name, width))
 
-    # 테스트 회차 컬럼 (각 회차별 5개 컬럼)
-    round_headers = ["Result", "Severity", "Comments", "Issue #", "Tester"]
+    # 테스트 회차 컬럼 (중앙 설정에서 가져옴)
+    round_headers = ROUND_SUBCOLUMNS
 
     # 기본 헤더 작성 (병합)
     for col_letter, header_text, width in base_headers:
@@ -284,7 +305,7 @@ def create_new_testcase_excel(testcases_data: dict, output_path: Path):
     round_fills = [round1_fill, round2_fill, round3_fill]
     round_start_col = len(base_headers) + 1  # O열부터
 
-    for round_num in range(1, 4):  # 1차, 2차, 3차
+    for round_num in range(1, NUM_TEST_ROUNDS + 1):  # 1차, 2차, 3차
         round_fill = round_fills[round_num - 1]
         start_col = round_start_col + (round_num - 1) * 5
 
@@ -330,8 +351,8 @@ def create_new_testcase_excel(testcases_data: dict, output_path: Path):
     testcases = testcases_data.get("testcases", [])
     data_start_row = header_row2 + 1  # 7행부터
 
-    # 총 컬럼 수 (기본 14 + 회차 15)
-    total_cols = len(base_headers) + 15
+    # 총 컬럼 수 (기본 컬럼 + 회차별 컬럼)
+    total_cols = len(base_headers) + len(ROUND_SUBCOLUMNS) * NUM_TEST_ROUNDS
 
     def safe_cell_value(value):
         """openpyxl에서 불법 문자 제거 및 안전한 셀 값 생성
@@ -404,27 +425,29 @@ def create_new_testcase_excel(testcases_data: dict, output_path: Path):
     # 헤더 행 고정
     sheet.freeze_panes = f"A{data_start_row}"
 
-    # 데이터 검증 (Result 컬럼에 드롭다운)
+    # 데이터 검증 (Result 컬럼에 드롭다운 - 중앙 설정에서 옵션 가져옴)
     from openpyxl.worksheet.datavalidation import DataValidation
+    result_options_str = ",".join(RESULT_OPTIONS)
     result_validation = DataValidation(
         type="list",
-        formula1='"Pass,Fail,N/T,Block"',
+        formula1=f'"{result_options_str}"',
         allow_blank=True
     )
     result_validation.error = "유효한 결과값을 선택하세요"
     result_validation.errorTitle = "Invalid Result"
 
+    severity_options_str = ",".join(SEVERITY_OPTIONS)
     severity_validation = DataValidation(
         type="list",
-        formula1='"Critical,Major,Minor,Trivial"',
+        formula1=f'"{severity_options_str}"',
         allow_blank=True
     )
 
     sheet.add_data_validation(result_validation)
     sheet.add_data_validation(severity_validation)
 
-    # Result 컬럼에 validation 적용 (O, T, Y열)
-    for round_num in range(3):
+    # Result 컬럼에 validation 적용 (O, T, Y열 등)
+    for round_num in range(NUM_TEST_ROUNDS):
         result_col = round_start_col + round_num * 5
         severity_col = result_col + 1
         result_col_letter = get_column_letter(result_col)

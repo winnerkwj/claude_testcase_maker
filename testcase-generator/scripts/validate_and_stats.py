@@ -122,6 +122,67 @@ def validate_page_order(testcases: List[Dict[str, Any]]) -> Tuple[bool, List[str
     return is_valid, errors[:5]
 
 
+def validate_test_step_quality(testcases: List[Dict[str, Any]]) -> Tuple[bool, List[str]]:
+    """Test Step 품질 검증 (단일 스텝, 위치 서술자, 진입 동작)"""
+    errors = []
+    total = len(testcases)
+    if total == 0:
+        return True, []
+
+    single_step_count = 0
+    missing_location_count = 0
+    missing_entry_count = 0
+
+    location_keywords = ["좌측", "우측", "상단", "하단", "중앙", "영역", "왼쪽", "오른쪽"]
+    entry_keywords = ["진입", "화면 진입", "탭 진입", "탭 화면"]
+
+    for idx, tc in enumerate(testcases, start=1):
+        tc_id = tc.get("test_case_id", f"행 {idx}")
+        test_step = tc.get("test_step", "").strip()
+
+        if not test_step:
+            continue
+
+        # 단일 스텝 검출: "\n"이 없고 "2." 도 없으면 단일 스텝
+        lines = [l.strip() for l in test_step.split("\n") if l.strip()]
+        if len(lines) <= 1 and "2." not in test_step:
+            single_step_count += 1
+
+        # 위치 서술자 검출
+        has_location = any(kw in test_step for kw in location_keywords)
+        if not has_location:
+            missing_location_count += 1
+
+        # 진입 동작 검출
+        has_entry = any(kw in test_step for kw in entry_keywords)
+        if not has_entry:
+            missing_entry_count += 1
+
+    # 단일 스텝 TC 비율이 30% 초과 시 경고
+    single_step_ratio = single_step_count / total if total > 0 else 0
+    if single_step_ratio > 0.3:
+        errors.append(
+            f"단일 스텝 TC 과다: {single_step_count}개/{total}개 ({single_step_ratio:.0%}) - 목표: 0%"
+        )
+
+    # 위치 서술자 누락 비율이 30% 초과 시 경고
+    missing_location_ratio = missing_location_count / total if total > 0 else 0
+    if missing_location_ratio > 0.3:
+        errors.append(
+            f"위치 서술자 누락 과다: {missing_location_count}개/{total}개 ({missing_location_ratio:.0%}) - 목표: 30% 이하"
+        )
+
+    # 진입 동작 누락 비율이 30% 초과 시 경고
+    missing_entry_ratio = missing_entry_count / total if total > 0 else 0
+    if missing_entry_ratio > 0.3:
+        errors.append(
+            f"진입 동작 누락 과다: {missing_entry_count}개/{total}개 ({missing_entry_ratio:.0%}) - 목표: 30% 이하"
+        )
+
+    is_valid = len(errors) == 0
+    return is_valid, errors
+
+
 def run_validation(data: Dict[str, Any]) -> Dict[str, Any]:
     """전체 검증 실행"""
     testcases = data.get("testcases", [])
@@ -141,6 +202,7 @@ def run_validation(data: Dict[str, Any]) -> Dict[str, Any]:
         ("Expected Result 형식", validate_expected_result_format),
         ("Reference 형식", validate_reference_format),
         ("페이지 순서", validate_page_order),
+        ("Test Step 품질", validate_test_step_quality),
     ]
 
     for name, func in validations:
@@ -249,6 +311,54 @@ def count_special_tc(testcases: List[Dict[str, Any]]) -> Dict[str, int]:
     return counts
 
 
+def count_step_quality_stats(testcases: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Test Step 품질 통계"""
+    total = len(testcases)
+    if total == 0:
+        return {"total": 0, "avg_steps": 0, "single_step": 0, "location_included": 0, "entry_included": 0}
+
+    step_counts = []
+    single_step_count = 0
+    location_count = 0
+    entry_count = 0
+
+    location_keywords = ["좌측", "우측", "상단", "하단", "중앙", "영역", "왼쪽", "오른쪽"]
+    entry_keywords = ["진입", "화면 진입", "탭 진입", "탭 화면"]
+
+    for tc in testcases:
+        test_step = tc.get("test_step", "").strip()
+        if not test_step:
+            step_counts.append(0)
+            single_step_count += 1
+            continue
+
+        lines = [l.strip() for l in test_step.split("\n") if l.strip()]
+        num_steps = len(lines)
+        step_counts.append(num_steps)
+
+        if num_steps <= 1 and "2." not in test_step:
+            single_step_count += 1
+
+        if any(kw in test_step for kw in location_keywords):
+            location_count += 1
+
+        if any(kw in test_step for kw in entry_keywords):
+            entry_count += 1
+
+    avg_steps = sum(step_counts) / len(step_counts) if step_counts else 0
+
+    return {
+        "total": total,
+        "avg_steps": round(avg_steps, 1),
+        "single_step": single_step_count,
+        "single_step_ratio": round(single_step_count / total * 100, 1) if total > 0 else 0,
+        "location_included": location_count,
+        "location_ratio": round(location_count / total * 100, 1) if total > 0 else 0,
+        "entry_included": entry_count,
+        "entry_ratio": round(entry_count / total * 100, 1) if total > 0 else 0,
+    }
+
+
 def generate_bar(count: int, total: int, width: int = 20) -> str:
     """막대 그래프 생성"""
     if total == 0:
@@ -277,6 +387,8 @@ def run_statistics(data: Dict[str, Any]) -> Dict[str, Any]:
         "count": cross_ref_count,
         "list": cross_ref_list
     }
+
+    stats["step_quality"] = count_step_quality_stats(testcases)
 
     return stats
 
@@ -369,6 +481,18 @@ def print_statistics(stats: Dict[str, Any]):
             print(f"  - {ref}")
         if len(cross_refs["list"]) > 3:
             print(f"  ... 외 {len(cross_refs['list']) - 3}건")
+
+    # Test Step 품질
+    sq = stats.get("step_quality", {})
+    if sq and sq.get("total", 0) > 0:
+        print()
+        print("-" * 60)
+        print("Test Step 품질")
+        print("-" * 60)
+        print(f"TC당 평균 단계 수: {sq['avg_steps']}단계")
+        print(f"단일 스텝 TC: {sq['single_step']}개 ({sq['single_step_ratio']}%) - 목표: 0%")
+        print(f"위치 서술자 포함: {sq['location_included']}개 ({sq['location_ratio']}%) - 목표: 70%+")
+        print(f"진입 동작 포함: {sq['entry_included']}개 ({sq['entry_ratio']}%) - 목표: 70%+")
 
     print("=" * 60)
 

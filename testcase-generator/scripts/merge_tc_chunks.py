@@ -17,6 +17,14 @@ import glob
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
+# 중앙 설정에서 가져오기
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+try:
+    from config import DEFAULT_TC_PREFIX
+except ImportError:
+    # config.py를 찾을 수 없는 경우 기본값 사용
+    DEFAULT_TC_PREFIX = "IT_XX"
+
 
 def extract_page_number(reference: str) -> int:
     """Reference 문자열에서 페이지 번호 추출"""
@@ -119,7 +127,7 @@ def sort_testcases_by_page(testcases: List[Dict[str, Any]]) -> List[Dict[str, An
     return sorted(testcases, key=sort_key)
 
 
-def reassign_tc_ids(testcases: List[Dict[str, Any]], prefix: str = "IT_OP") -> List[Dict[str, Any]]:
+def reassign_tc_ids(testcases: List[Dict[str, Any]], prefix: str = DEFAULT_TC_PREFIX) -> List[Dict[str, Any]]:
     """TC ID 순차 재할당"""
     for idx, tc in enumerate(testcases, start=1):
         # 원래 ID 백업
@@ -172,7 +180,7 @@ def detect_prefix_from_chunks(chunks: List[Dict[str, Any]]) -> str:
             match = re.match(r'(IT_[A-Z]+)_', tc_id)
             if match:
                 return match.group(1)
-    return "IT_OP"
+    return DEFAULT_TC_PREFIX
 
 
 def merge_tc_chunks(
