@@ -14,12 +14,8 @@ __pycache__/
 *.pyc
 
 # Output files (generated)
-output/*.xlsx
-output/*.json
-output/images/
-testcase-generator/output/*.xlsx
-testcase-generator/output/*.json
-testcase-generator/output/images/
+output/
+testcase-generator/output/
 
 # Comparison/debug files
 compare_output.txt
@@ -28,9 +24,6 @@ comparison_report.txt
 extracted.json
 testcases.json
 
-# Keep .gitignore in output folders
-!output/.gitignore
-!testcase-generator/output/.gitignore
 
 # IDE
 .vscode/
