@@ -30,15 +30,16 @@
 ## 프로젝트 구조
 ```
 testcase-generator/
-├── config.py                   # 🆕 중앙 설정 파일 (경로, 상수)
-├── tc_config.yaml              # 🆕 설정 문서 (Claude용)
+├── config.py                   # 중앙 설정 파일 (경로, 상수)
+├── tc_config.yaml              # 설정 문서 (Claude용)
 ├── scripts/
 │   ├── extract_images.py       # 이미지 추출 (Phase 1)
 │   ├── extract_pptx.py         # PPTX 텍스트/컴포넌트 추출 (Phase 1)
 │   ├── plan_chunks.py          # 청크 분할 계획 생성 (Step 2)
+│   ├── pre_analyze.py          # 🆕 TC 플래닝 사전 분석 (Step 2.7a)
 │   ├── merge_tc_chunks.py      # TC 청크 병합 (Step 4)
 │   ├── write_excel.py          # Excel 출력 (Step 5)
-│   ├── validate_and_stats.py   # 검증 + 통계 통합 (Step 5)
+│   ├── validate_and_stats.py   # 검증 + 통계 통합 (Step 6)
 │   ├── run_all.py              # 기존 통합 실행 (레거시)
 │   ├── merge_analysis.py       # 분석 결과 병합 (레거시)
 │   └── generate_testcase.py    # TC 생성 (레거시)
@@ -57,8 +58,11 @@ output/                         # 출력 폴더 (프로젝트 루트에 위치)
 ├── image_manifest.json         # 이미지 메타데이터
 ├── pptx_data.json              # PPTX 텍스트/컴포넌트 데이터
 ├── chunk_plan.json             # 청크 분할 계획
+├── pre_analysis_raw.json       # 🆕 사전 분석 결과
+├── tc_plan.json                # 🆕 TC 작성 계획 (플래닝 에이전트 출력)
 ├── tc_chunk_*.json             # 청크별 TC (병렬 처리용)
-└── tc_data.json                # 최종 병합된 TC 데이터
+├── tc_data.json                # 최종 병합된 TC 데이터
+└── verification_report.json    # 🆕 검증 리포트
 ```
 
 ## TC ID 형식
@@ -132,12 +136,17 @@ Claude는 다음 상황에서 적절한 스킬을 자동 실행합니다.
 [메인 컨텍스트 - 오케스트레이터]
   ├── Step 1: Phase 1 실행 (이미지/텍스트 추출)
   ├── Step 2: 청크 계획 수립 (plan_chunks.py)
-  ├── Step 3: 병렬 에이전트 디스패치
+  ├── Step 2.5: 기존 tc_chunk_*.json 삭제
+  ├── Step 2.7a: 사전 분석 (pre_analyze.py) → pre_analysis_raw.json
+  ├── Step 2.7b: TC 플래닝 에이전트 (이미지 상세 분석 → tc_plan.json)  🆕
+  ├── Step 3: 청크 에이전트 병렬 디스패치 (tc_plan 기반)
   │     ├── Agent-1: Chunk 1 (1~15P) → tc_chunk_1.json
   │     ├── Agent-2: Chunk 2 (16~30P) → tc_chunk_2.json
   │     └── Agent-3: Chunk 3 (31~45P) → tc_chunk_3.json
   ├── Step 4: 결과 병합 (merge_tc_chunks.py)
-  └── Step 5: Excel 출력 + 검증/통계 통합
+  ├── Step 5: Excel 출력 (write_excel.py, 1차)
+  ├── Step 5.5: 검증 에이전트 (tc_plan vs tc_data 비교, 보완 TC)  🆕
+  └── Step 6: validate_and_stats.py (형식 검증 + 통계)
 ```
 
 ### 청크 기반 처리 이점
@@ -157,6 +166,9 @@ Claude는 다음 상황에서 적절한 스킬을 자동 실행합니다.
 | MAX_PARALLEL_AGENTS | 10 | `TC_MAX_PARALLEL_AGENTS` |
 | MIN_CHUNKS | 3 | `TC_MIN_CHUNKS` |
 | DEFAULT_TC_PREFIX | IT_XX | `TC_PREFIX` |
+| PRE_ANALYSIS_ENABLED | true | `TC_PRE_ANALYSIS_ENABLED` |
+| VERIFICATION_ENABLED | true | `TC_VERIFICATION_ENABLED` |
+| PRE_ANALYSIS_IMAGE_LIMIT | 15 | `TC_PRE_ANALYSIS_IMAGE_LIMIT` |
 
 ### 에이전트 모델 설정
 
@@ -317,6 +329,10 @@ Task 도구: model: "opus"
 | **기존 TC 패턴 재사용** | 이전 분석 결과 참조 | 매번 pptx_data.json과 이미지 새로 분석 |
 | **depth4 빈 문자열 오탐** | 검증 함수가 빈 문자열을 누락으로 판정 | depth4=""는 정상 (수정 완료) |
 | **진입 동작 검출율 낮음** | 키워드가 "진입"만 포함 | "프로그램 실행", "화면에서" 등 확장 (수정 완료) |
+| pre_analyze.py 실패 | 데이터 형식 오류 | 경고, tc_plan 없이 기존 방식 진행 |
+| TC 플래닝 에이전트 실패 | 컨텍스트 초과 등 | 경고, tc_plan 없이 기존 방식 진행 |
+| tc_plan.json 없음 | 플래닝 비활성/실패 | 청크 에이전트 기존처럼 독립 동작 (하위 호환) |
+| 검증 에이전트 실패 | 에이전트 오류 | 기존 Excel 유지, 검증 건너뜀 |
 
 ---
 
@@ -369,8 +385,13 @@ TC 내용은 반드시 화면정의서(PPTX) 데이터만 사용
 ```
 ✅ Phase 1 스크립트 실행 (Bash)
 ✅ 청크 계획 스크립트 실행 (Bash) - 청크 수만 확인
-✅ 에이전트 디스패치 (Task) - 3개씩 병렬
-✅ 병합/Excel/검증 스크립트 실행 (Bash)
+✅ 사전 분석 스크립트 실행 (Bash) - pre_analyze.py
+✅ TC 플래닝 에이전트 디스패치 (Task) - tc_plan.json 생성
+✅ tc_plan.json Read (청크 에이전트에 분배 필요)
+✅ 청크 에이전트 디스패치 (Task) - tc_plan 기반 병렬
+✅ 병합/Excel 스크립트 실행 (Bash)
+✅ 검증 에이전트 디스패치 (Task) - 보완 TC 확인
+✅ validate_and_stats.py 실행 (Bash)
 ✅ 최종 결과 요약 출력
 ```
 
@@ -380,6 +401,12 @@ TC 내용은 반드시 화면정의서(PPTX) 데이터만 사용
 ❌ chunk_plan.json 전체 내용 Read로 읽기 (청크 수만 필요)
 ❌ TC 내용 직접 작성 (에이전트 역할)
 ❌ 각 청크 결과 JSON 상세 확인 (병합 후 검증으로 충분)
+```
+
+**메인에서 Read 허용하는 파일:**
+```
+✅ tc_plan.json (각 청크 에이전트에 필요한 부분 추출용)
+✅ verification_report.json (보완 TC 유무 확인용)
 ```
 
 ### 청크 에이전트 역할
@@ -437,13 +464,16 @@ py extract_pptx.py "파일.pptx" "output/pptx_data.json"
 # Step 2: 청크 계획 확인
 py plan_chunks.py "output/pptx_data.json" --max-pages 15
 
+# Step 2.7a: 사전 분석
+py pre_analyze.py "output/pptx_data.json"
+
 # Step 4: TC 청크 병합
 py merge_tc_chunks.py "output" --prefix IT_{PREFIX}
 
 # Step 5: Excel 출력만 실행
 py write_excel.py "output/tc_data.json" "output/test.xlsx"
 
-# Step 5: 검증 + 통계 (통합)
+# Step 6: 검증 + 통계 (통합)
 py validate_and_stats.py "output/tc_data.json"
 
 # 검증만

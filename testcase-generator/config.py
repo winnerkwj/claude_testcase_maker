@@ -191,6 +191,20 @@ def resolve_output_path(filename: str) -> Path:
 
 
 # ============================================================
+# TC 플래닝 / 검증 설정
+# ============================================================
+
+# 사전 분석 + TC 플래닝 활성화 여부
+PRE_ANALYSIS_ENABLED: bool = _get_env_str("TC_PRE_ANALYSIS_ENABLED", "true").lower() == "true"
+
+# 검증 에이전트 활성화 여부
+VERIFICATION_ENABLED: bool = _get_env_str("TC_VERIFICATION_ENABLED", "true").lower() == "true"
+
+# TC 플래닝 에이전트 이미지 분석 제한 (단일 에이전트 최대 슬라이드 수)
+PRE_ANALYSIS_IMAGE_LIMIT: int = _get_env_int("TC_PRE_ANALYSIS_IMAGE_LIMIT", 15)
+
+
+# ============================================================
 # 설정 출력 (디버깅용)
 # ============================================================
 
@@ -211,6 +225,10 @@ def print_config():
     print(f"DEFAULT_TC_PREFIX:      {DEFAULT_TC_PREFIX}")
     print(f"FULLPAGE_WIDTH:         {FULLPAGE_WIDTH}")
     print(f"FULLPAGE_HEIGHT:        {FULLPAGE_HEIGHT}")
+    print("-" * 60)
+    print(f"PRE_ANALYSIS_ENABLED:   {PRE_ANALYSIS_ENABLED}")
+    print(f"VERIFICATION_ENABLED:   {VERIFICATION_ENABLED}")
+    print(f"PRE_ANALYSIS_IMAGE_LIMIT: {PRE_ANALYSIS_IMAGE_LIMIT}")
     print("=" * 60)
 
 
