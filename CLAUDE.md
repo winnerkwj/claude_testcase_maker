@@ -387,8 +387,7 @@ TC 내용은 반드시 화면정의서(PPTX) 데이터만 사용
 ✅ 청크 계획 스크립트 실행 (Bash) - 청크 수만 확인
 ✅ 사전 분석 스크립트 실행 (Bash) - pre_analyze.py
 ✅ TC 플래닝 에이전트 디스패치 (Task) - tc_plan.json 생성
-✅ tc_plan.json Read (청크 에이전트에 분배 필요)
-✅ 청크 에이전트 디스패치 (Task) - tc_plan 기반 병렬
+✅ 청크 에이전트 디스패치 (Task) - tc_plan.json 경로만 전달, 에이전트가 직접 Read
 ✅ 병합/Excel 스크립트 실행 (Bash)
 ✅ 검증 에이전트 디스패치 (Task) - 보완 TC 확인
 ✅ validate_and_stats.py 실행 (Bash)
@@ -405,8 +404,8 @@ TC 내용은 반드시 화면정의서(PPTX) 데이터만 사용
 
 **메인에서 Read 허용하는 파일:**
 ```
-✅ tc_plan.json (각 청크 에이전트에 필요한 부분 추출용)
-✅ verification_report.json (보완 TC 유무 확인용)
+❌ tc_plan.json (메인에서 읽지 말 것! 에이전트가 직접 Read)
+✅ verification_report.json (보완 TC 유무 확인용, supplementary_tc 부분만)
 ```
 
 ### 청크 에이전트 역할

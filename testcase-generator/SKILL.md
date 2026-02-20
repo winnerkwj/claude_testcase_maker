@@ -162,6 +162,7 @@ Description: "버튼 클릭 시 환자 정보 팝업 표시.
 메인 컨텍스트에서 하면 안 되는 일:
 - ❌ pptx_data.json 내용 Read로 읽기
 - ❌ chunk_plan.json 내용 Read로 읽기 (청크 수만 확인)
+- ❌ tc_plan.json 내용 Read로 읽기 (경로만 에이전트에 전달!)
 - ❌ TC 내용 직접 작성
 - ❌ 각 청크 결과 상세 확인
 
@@ -353,15 +354,17 @@ py pre_analyze.py "{output_dir}/pptx_data.json" \
 **입력**: pre_analysis_raw.json + pptx_data.json + 모든 fullpage 이미지
 **출력**: `{output_dir}/tc_plan.json`
 
-**메인에서 tc_plan.json 읽기**: tc_plan.json은 메인에서 Read로 읽어서 각 청크 에이전트에 필요한 부분 추출
+**tc_plan.json은 메인에서 읽지 않음**: 청크 에이전트에 tc_plan.json 경로만 전달, 에이전트가 직접 Read하여 담당 슬라이드 계획 확인 (메인 컨텍스트 20k+ tokens 절약)
 
 **폴백**: 에이전트 실패 시 경고 출력, Step 3은 tc_plan 없이 기존 방식으로 진행
 
 ### Step 3: [메인] 병렬 에이전트 디스패치 (tc_plan 기반)
 모든 문서: plan_chunks.py 결과(최소 3청크)에 따라 Task 도구로 **항상 병렬 실행**
 
-**tc_plan.json이 있는 경우**: 청크 에이전트 프롬프트에 계획 정보 포함
+**tc_plan.json이 있는 경우**: 청크 에이전트 프롬프트에 tc_plan.json **경로만** 전달, 에이전트가 직접 Read
 **tc_plan.json이 없는 경우**: 기존처럼 독립적으로 TC 작성 (하위 호환)
+
+⚠️ **메인에서 tc_plan.json Read 금지** (20k+ tokens 컨텍스트 낭비 방지)
 
 **중요**: Task 도구 호출 시 한 번의 메시지에 여러 Task 호출을 포함하여 병렬 실행
 
@@ -632,34 +635,19 @@ TC ID 접두사: {prefix}
 이미지 폴더: {output_dir}/images/
 이미지 매니페스트: {output_dir}/image_manifest.json
 
-### TC 작성 계획 (tc_plan이 있는 경우만 포함 - 반드시 이 계획에 따라 TC 작성!)
+### TC 작성 계획 (tc_plan.json 직접 읽기)
 
-#### Depth 구조 (확정 - 자체 결정 금지!)
-{depth_assignments_for_chunk_slides}
+⚠️ tc_plan.json을 Read 도구로 직접 읽어서 담당 슬라이드의 계획을 확인하세요.
+TC 계획 파일: {output_dir}/tc_plan.json
 
-#### 레이아웃 맵
-{layout_map}
+1. tc_plan.json을 Read 도구로 열기
+2. global_context에서 Depth 구조, 위치 규칙, 크로스 레퍼런스 확인
+3. slide_plans에서 담당 슬라이드({slide_list})의 planned_tc 확인
+4. chunk_assignments에서 인접 청크 정보 확인
+5. 계획의 모든 TC를 빠짐없이 작성
+6. 계획에 없는 TC를 추가로 발견하면 작성해도 됨
 
-#### 위치 규칙
-{position_conventions}
-
-#### 이 청크에서 작성할 TC 목록
-{planned_tc_list_for_chunk}
-
-⚠️ 위 계획의 모든 TC를 빠짐없이 작성하세요.
-⚠️ 계획에 없는 TC를 추가로 발견하면 작성해도 됩니다.
-⚠️ Depth, 위치 서술자는 반드시 위 규칙을 따르세요.
-
-#### 크로스 레퍼런스 (이 청크 관련)
-{relevant_cross_refs}
-
-#### 인접 청크 요약
-{adjacent_chunk_summaries}
-
-(tc_plan이 없는 경우: 위 섹션 생략, 기존처럼 독립적으로 TC 작성)
-
-### 슬라이드 데이터
-{filtered_pptx_data}
+(tc_plan.json이 없는 경우: 기존처럼 pptx_data.json과 이미지를 분석하여 독립적으로 TC 작성)
 
 ### 🖼️ 이미지 분석 (필수)
 
@@ -1288,13 +1276,11 @@ testcase-generator/
 2.7b. TC 플래닝 에이전트 (opus)
    - pre_analysis_raw.json + pptx_data.json + fullpage 이미지 분석
    - 출력: tc_plan.json
-   - 메인에서 tc_plan.json Read (각 청크에 분배 필요)
+   - ❌ 메인에서 tc_plan.json Read 금지 (컨텍스트 낭비)
 
 3. 청크 에이전트 디스패치 (tc_plan 기반)
-   - tc_plan.json에서 각 청크에 필요한 부분 추출:
-     - global_context 전체 (공통)
-     - slide_plans에서 해당 청크 슬라이드만 필터링
-     - chunk_assignments에서 인접 청크 정보
+   - 청크 에이전트 프롬프트에 tc_plan.json **경로만** 전달
+   - 에이전트가 직접 tc_plan.json을 Read하여 담당 슬라이드 계획 확인
    - 모든 청크를 Task 도구로 병렬 실행
    - Task 도구 호출 시 병렬 실행 위해 한 메시지에 여러 Task
 
