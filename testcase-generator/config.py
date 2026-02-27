@@ -205,6 +205,20 @@ PRE_ANALYSIS_IMAGE_LIMIT: int = _get_env_int("TC_PRE_ANALYSIS_IMAGE_LIMIT", 15)
 
 
 # ============================================================
+# Reference Mapping 설정
+# ============================================================
+
+# 매핑 에이전트당 TC 수
+REF_MAP_TCS_PER_CHUNK: int = _get_env_int("TC_REF_MAP_TCS_PER_CHUNK", 40)
+
+# 매핑 동시 에이전트 최대 수
+REF_MAP_MAX_AGENTS: int = _get_env_int("TC_REF_MAP_MAX_AGENTS", 5)
+
+# 자동 적용 confidence 임계값
+REF_MAP_CONFIDENCE_THRESHOLD: float = 0.7
+
+
+# ============================================================
 # 설정 출력 (디버깅용)
 # ============================================================
 
@@ -229,6 +243,10 @@ def print_config():
     print(f"PRE_ANALYSIS_ENABLED:   {PRE_ANALYSIS_ENABLED}")
     print(f"VERIFICATION_ENABLED:   {VERIFICATION_ENABLED}")
     print(f"PRE_ANALYSIS_IMAGE_LIMIT: {PRE_ANALYSIS_IMAGE_LIMIT}")
+    print("-" * 60)
+    print(f"REF_MAP_TCS_PER_CHUNK:  {REF_MAP_TCS_PER_CHUNK}")
+    print(f"REF_MAP_MAX_AGENTS:     {REF_MAP_MAX_AGENTS}")
+    print(f"REF_MAP_CONFIDENCE_THRESHOLD: {REF_MAP_CONFIDENCE_THRESHOLD}")
     print("=" * 60)
 
 

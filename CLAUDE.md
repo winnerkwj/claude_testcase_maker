@@ -17,6 +17,7 @@
 | `/extract-images <파일>` | `/ei` | PPTX에서 이미지 추출 |
 | `/validate-tc [파일]` | `/vtc` | TC 품질 검증 |
 | `/tc-stats [파일]` | `/stats` | TC 통계 및 분포 분석 |
+| `/map-reference <Excel> <PPTX>` | `/mr` | TC Reference 자동 매핑 |
 
 ## 출력 경로
 
@@ -40,6 +41,10 @@ testcase-generator/
 │   ├── merge_tc_chunks.py      # TC 청크 병합 (Step 4)
 │   ├── write_excel.py          # Excel 출력 (Step 5)
 │   ├── validate_and_stats.py   # 검증 + 통계 통합 (Step 6)
+│   ├── read_tc_excel.py        # TC Excel 읽기 (Reference 매핑)
+│   ├── build_slide_index.py    # 슬라이드 인덱스 생성 (Reference 매핑)
+│   ├── merge_ref_chunks.py     # Reference 매핑 청크 병합
+│   ├── update_tc_excel.py      # Excel Reference 컬럼 업데이트
 │   ├── run_all.py              # 기존 통합 실행 (레거시)
 │   ├── merge_analysis.py       # 분석 결과 병합 (레거시)
 │   └── generate_testcase.py    # TC 생성 (레거시)
@@ -51,7 +56,8 @@ testcase-generator/
 ├── SKILL.md                    # 메인 스킬 정의
 ├── SKILL-extract-images.md     # 이미지 추출 스킬
 ├── SKILL-validate-tc.md        # TC 검증 스킬
-└── SKILL-tc-stats.md           # TC 통계 스킬
+├── SKILL-tc-stats.md           # TC 통계 스킬
+└── SKILL-map-reference.md      # Reference 매핑 스킬
 
 output/                         # 출력 폴더 (프로젝트 루트에 위치)
 ├── images/                     # 추출된 이미지
@@ -62,7 +68,11 @@ output/                         # 출력 폴더 (프로젝트 루트에 위치)
 ├── tc_plan.json                # 🆕 TC 작성 계획 (플래닝 에이전트 출력)
 ├── tc_chunk_*.json             # 청크별 TC (병렬 처리용)
 ├── tc_data.json                # 최종 병합된 TC 데이터
-└── verification_report.json    # 🆕 검증 리포트
+├── verification_report.json    # 🆕 검증 리포트
+├── tc_input.json               # TC Excel 읽기 결과 (Reference 매핑용)
+├── slide_index.json            # 슬라이드 인덱스 (Reference 매핑용)
+├── ref_chunk_*.json            # 청크별 Reference 매핑 결과
+└── ref_mapping.json            # 최종 병합된 Reference 매핑
 ```
 
 ## TC ID 형식
@@ -125,6 +135,7 @@ Claude는 다음 상황에서 적절한 스킬을 자동 실행합니다.
 | TC 생성 완료 직후 | `validate_and_stats.py` | 자동 검증 + 통계 |
 | "검증", "확인", "체크" + Excel/TC 언급 | `/validate-tc` | TC 품질 검증 |
 | "통계", "요약", "분포" + TC 언급 | `/tc-stats` | 통계 요약 |
+| TC Excel + "Reference" + PPTX | `/map-reference` | Reference 자동 매핑 |
 | 오류 발생 시 | 문제 해결 가이드 참조 | 자동 대응 안내 |
 
 ### 청크 기반 병렬 처리 워크플로우
@@ -169,6 +180,8 @@ Claude는 다음 상황에서 적절한 스킬을 자동 실행합니다.
 | PRE_ANALYSIS_ENABLED | true | `TC_PRE_ANALYSIS_ENABLED` |
 | VERIFICATION_ENABLED | true | `TC_VERIFICATION_ENABLED` |
 | PRE_ANALYSIS_IMAGE_LIMIT | 15 | `TC_PRE_ANALYSIS_IMAGE_LIMIT` |
+| REF_MAP_TCS_PER_CHUNK | 40 | `TC_REF_MAP_TCS_PER_CHUNK` |
+| REF_MAP_MAX_AGENTS | 5 | `TC_REF_MAP_MAX_AGENTS` |
 
 ### 에이전트 모델 설정
 
@@ -194,6 +207,9 @@ Task 도구: model: "opus"
 
 사용자: "생성된 Excel 검증해줘"
 → /validate-tc 자동 실행
+
+사용자: "이 TC Excel에 Reference 매핑해줘" + PPTX 파일
+→ /map-reference 자동 실행
 ```
 
 ---
@@ -333,6 +349,8 @@ Task 도구: model: "opus"
 | TC 플래닝 에이전트 실패 | 컨텍스트 초과 등 | 경고, tc_plan 없이 기존 방식 진행 |
 | tc_plan.json 없음 | 플래닝 비활성/실패 | 청크 에이전트 기존처럼 독립 동작 (하위 호환) |
 | 검증 에이전트 실패 | 에이전트 오류 | 기존 Excel 유지, 검증 건너뜀 |
+| **Reference 뭉침 (Lumped)** | 매핑 에이전트가 부모/UI 페이지에 집중 | remap_lumped.py로 하위 페이지 재분배, 에이전트 프롬프트에 "최구체 페이지 원칙" 추가 |
+| **PPTX 하이라이트 미표시** | `<a:highlight>` XML 순서 오류 | `latin`/`ea`/`cs` 앞에 삽입 필수 (AFTER_HIGHLIGHT 셋 참조) |
 
 ---
 
@@ -480,4 +498,19 @@ py validate_and_stats.py "output/tc_data.json" --validate-only
 
 # 통계만
 py validate_and_stats.py "output/tc_data.json" --stats-only
+
+# Reference 매핑: TC Excel 읽기
+py read_tc_excel.py "TC.xlsx" --output "output/tc_input.json"
+
+# Reference 매핑: 슬라이드 인덱스 생성
+py build_slide_index.py "output/pptx_data.json" --output "output/slide_index.json"
+
+# Reference 매핑: 청크 병합
+py merge_ref_chunks.py "output" --output "output/ref_mapping.json"
+
+# Reference 매핑: Excel 업데이트 (dry-run)
+py update_tc_excel.py "TC.xlsx" "output/ref_mapping.json" --dry-run
+
+# Reference 매핑: Excel 업데이트 (실제 적용)
+py update_tc_excel.py "TC.xlsx" "output/ref_mapping.json" --output "Updated_TC.xlsx"
 ```
